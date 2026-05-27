@@ -1,20 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        window.location.replace('/dashboard')
-      }
-    })
-  }, [])
 
   async function handleLogin() {
     setError('')
@@ -32,7 +23,10 @@ export default function LoginPage() {
     if (authError) {
       setError(authError.message)
       setLoading(false)
+      return
     }
+
+    window.location.replace('/dashboard')
   }
 
   return (
