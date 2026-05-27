@@ -8,7 +8,7 @@ interface AnalysisSummary {
 }
 
 async function getStats(userId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const [productsRes, analysesRes] = await Promise.all([
     supabase.from('products').select('id', { count: 'exact' }).eq('user_id', userId).eq('is_active', true),
     supabase.from('price_analyses').select('alert, run_at').eq('user_id', userId).gte('run_at', new Date(Date.now() - 7 * 86400000).toISOString()),
