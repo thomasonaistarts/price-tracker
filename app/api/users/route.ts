@@ -3,7 +3,6 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
 import { createUserSchema } from '@/lib/validations'
 
-// POST /api/users — yeni kullanıcı oluştur (sadece admin)
 export async function POST(req: NextRequest) {
   try {
     await requireAdmin()
@@ -18,13 +17,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password, full_name, role } = parsed.data
-  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
 
-  // 1. Supabase Auth'da kullanıcı oluştur
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: true, // e-posta onayı gerekmez
+    email_confirm: true,
     user_metadata: { full_name, role },
   })
 
@@ -32,7 +31,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authError.message }, { status: 400 })
   }
 
-  // 2. public.users tablosunu güncelle (trigger otomatik yapar ama role ekle)
   const { error: profileError } = await supabase
     .from('users')
     .update({ role })
@@ -45,7 +43,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ success: true, userId: authData.user.id }, { status: 201 })
 }
 
-// GET /api/users — tüm kullanıcıları listele (admin)
 export async function GET() {
   try {
     await requireAdmin()
@@ -53,7 +50,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
   }
 
-  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
   const { data, error } = await supabase
     .from('users')
     .select('*')
