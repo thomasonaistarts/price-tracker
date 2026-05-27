@@ -4,24 +4,25 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [debug, setDebug] = useState('')
 
   async function handleLogin() {
     setError('')
-    setDebug('handleLogin çalıştı...')
     setLoading(true)
 
-    try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      setDebug(`URL: ${url ? url.slice(0,30) : 'YOK'} | KEY: ${key ? 'var' : 'YOK'}`)
+    const emailVal = (document.getElementById('email-input') as HTMLInputElement)?.value
+    const passwordVal = (document.getElementById('password-input') as HTMLInputElement)?.value
 
+    setDebug(`email: "${emailVal}" | şifre uzunluk: ${passwordVal?.length}`)
+
+    try {
       const supabase = createClient()
-      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailVal,
+        password: passwordVal,
+      })
 
       if (authError) {
         setError(authError.message)
@@ -39,7 +40,7 @@ export default function LoginPage() {
       }
     } catch(err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      setError('Beklenmeyen hata: ' + msg)
+      setError('Hata: ' + msg)
       setDebug('catch: ' + msg)
       setLoading(false)
     }
@@ -52,20 +53,20 @@ export default function LoginPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">E-posta</label>
           <input
+            id="email-input"
             type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            defaultValue=""
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="ad@sirket.com"
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Şifre</label>
           <input
+            id="password-input"
             type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            defaultValue=""
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="••••••••"
           />
         </div>
@@ -83,7 +84,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleLogin}
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm"
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
         >
           {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
         </button>
