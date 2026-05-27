@@ -4,7 +4,7 @@ import UserTable from '@/components/admin/UserTable'
 
 export default async function AdminUsersPage() {
   await requireAdmin()
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: users } = await supabase
     .from('users')
     .select('*')
