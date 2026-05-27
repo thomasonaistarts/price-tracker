@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
   // Korumalı route'lar — giriş yapılmamışsa login'e yönlendir
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL('/auth/login', request.url))
     }
   }
 
@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Giriş yapmışsa login/register'a gitmesin
-  if (pathname === '/login' || pathname === '/register') {
+  if (pathname === '/auth/login' || pathname === '/register') {
     if (user) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
