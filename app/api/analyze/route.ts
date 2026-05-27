@@ -41,4 +41,35 @@ export async function POST(req: NextRequest) {
 
     if (productError || !product) continue
 
-    await supabase
+    await supabase.from('price_analyses').insert({
+      product_id: product.id,
+      user_id: userId,
+      market_mean: result.market_mean,
+      market_median: result.market_median,
+      market_std: result.market_std,
+      min_price: result.min_price,
+      max_price: result.max_price,
+      price_diff_percent: result.price_diff_percent,
+      alert: result.alert,
+      alert_reason: result.alert_reason,
+      sources_count: result.sources_count,
+      sources: result.sources,
+      confidence: result.confidence,
+      threshold_used: result.threshold_used,
+      notes: result.notes,
+      follow_up: result.follow_up,
+    })
+  }
+
+  const alertCount = results.filter(
+    (r: { alert: string }) => r.alert === 'above_market' || r.alert === 'below_market'
+  ).length
+
+  return NextResponse.json({
+    run_timestamp: new Date().toISOString(),
+    products_checked: results.length,
+    alerts_count: alertCount,
+    marketwide_volatility: alertCount / results.length > 0.2,
+    results,
+  })
+}
