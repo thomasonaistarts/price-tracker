@@ -28,9 +28,8 @@ export default function LoginPage() {
     }
 
     if (data.session) {
-      router.push('/dashboard')
-      router.refresh()
-    } else {
+  window.location.href = '/dashboard'
+} else {
       setError('Oturum açılamadı, tekrar deneyin.')
       setLoading(false)
     }
