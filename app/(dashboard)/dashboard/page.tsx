@@ -1,5 +1,11 @@
 import { requireAuth, getUserProfile } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import type { AlertType } from '@/types/database'
+
+interface AnalysisSummary {
+  alert: AlertType
+  run_at: string
+}
 
 async function getStats(userId: string) {
   const supabase = createClient()
@@ -7,7 +13,7 @@ async function getStats(userId: string) {
     supabase.from('products').select('id', { count: 'exact' }).eq('user_id', userId).eq('is_active', true),
     supabase.from('price_analyses').select('alert, run_at').eq('user_id', userId).gte('run_at', new Date(Date.now() - 7 * 86400000).toISOString()),
   ])
-  const analyses = analysesRes.data ?? []
+  const analyses = (analysesRes.data ?? []) as AnalysisSummary[]
   return {
     totalProducts: productsRes.count ?? 0,
     alertsThisWeek: analyses.filter(a => a.alert === 'above_market' || a.alert === 'below_market').length,
