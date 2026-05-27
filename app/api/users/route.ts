@@ -17,8 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password, full_name, role } = parsed.data
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = await createAdminClient() as any
 
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
@@ -50,13 +49,14 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = await createAdminClient() as any
+
   const { data, error } = await supabase
     .from('users')
     .select('*')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
   return NextResponse.json(data)
 }
