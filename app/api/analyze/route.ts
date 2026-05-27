@@ -41,4 +41,4 @@ export async function POST(req: NextRequest) {
 
     if (productError || !product) continue
 
-    await supaba
+    await supabase
