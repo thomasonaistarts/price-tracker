@@ -10,8 +10,8 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect('/login')
-  }
+  redirect('/auth/login')  // ← /login değil, /auth/login
+}
 
   return (
     <div className="min-h-screen bg-gray-50">
