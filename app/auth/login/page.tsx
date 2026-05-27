@@ -26,6 +26,12 @@ export default function LoginPage() {
     setLoading(true)
     const supabase = createClient()
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+if (authError) {
+  console.error('Auth error:', authError.message, authError)
+  setError(authError.message)
+  setLoading(false)
+  return
+}
 
     if (authError) {
       setError('E-posta veya şifre hatalı.')
