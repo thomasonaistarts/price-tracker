@@ -1,13 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { loginSchema } from '@/lib/validations'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -25,22 +23,20 @@ export default function LoginPage() {
 
     setLoading(true)
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
-if (authError) {
-  console.error('Auth error:', authError.message, authError)
-  setError(authError.message)
-  setLoading(false)
-  return
-}
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
-      setError('E-posta veya şifre hatalı.')
+      setError(authError.message)
       setLoading(false)
       return
     }
 
-    router.push('/dashboard')
-    router.refresh()
+    if (data.session) {
+      window.location.href = '/dashboard'
+    } else {
+      setError('Oturum açılamadı, tekrar deneyin.')
+      setLoading(false)
+    }
   }
 
   return (
