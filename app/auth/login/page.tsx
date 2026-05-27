@@ -10,6 +10,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
+    console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+console.log('KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'var' : 'YOK')
     e.preventDefault()
     setError('')
     setLoading(true)
