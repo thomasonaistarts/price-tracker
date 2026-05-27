@@ -1,94 +1,59 @@
 'use client'
 
-import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [debug, setDebug] = useState('')
-
   async function handleLogin() {
-    setError('')
-    setLoading(true)
+    const emailInput = document.getElementById('email-input') as HTMLInputElement
+    const passwordInput = document.getElementById('password-input') as HTMLInputElement
 
-    const emailVal = (document.getElementById('email-input') as HTMLInputElement)?.value
-    const passwordVal = (document.getElementById('password-input') as HTMLInputElement)?.value
+    const emailVal = emailInput?.value ?? ''
+    const passwordVal = passwordInput?.value ?? ''
 
-    setDebug(`email: "${emailVal}" | şifre uzunluk: ${passwordVal?.length}`)
+    alert(`email: "${emailVal}" | şifre: ${passwordVal.length} karakter`)
+
+    if (!emailVal || !passwordVal) {
+      alert('Email veya şifre boş!')
+      return
+    }
 
     try {
       const supabase = createClient()
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: emailVal,
         password: passwordVal,
       })
 
-      if (authError) {
-        setError(authError.message)
-        setDebug('Auth hatası: ' + authError.message)
-        setLoading(false)
+      if (error) {
+        alert('Hata: ' + error.message)
         return
       }
 
       if (data.session) {
-        setDebug('Giriş başarılı, yönlendiriliyor...')
+        alert('Başarılı! Yönlendiriliyor...')
         window.location.href = '/dashboard'
       } else {
-        setError('Oturum açılamadı.')
-        setLoading(false)
+        alert('Session yok')
       }
-    } catch(err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setError('Hata: ' + msg)
-      setDebug('catch: ' + msg)
-      setLoading(false)
+    } catch(e) {
+      alert('Exception: ' + String(e))
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
-      <h2 className="text-lg font-medium text-gray-900 mb-6">Giriş yap</h2>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">E-posta</label>
-          <input
-            id="email-input"
-            type="email"
-            defaultValue=""
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="ad@sirket.com"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Şifre</label>
-          <input
-            id="password-input"
-            type="password"
-            defaultValue=""
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="••••••••"
-          />
-        </div>
-        {debug && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 break-all">
-            {debug}
-          </div>
-        )}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={handleLogin}
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
-        >
-          {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
-        </button>
+    <div style={{padding: '2rem', maxWidth: '400px', margin: '2rem auto', border: '1px solid #ccc', borderRadius: '8px'}}>
+      <h2>Giriş yap</h2>
+      <div style={{marginBottom: '1rem'}}>
+        <label>E-posta</label><br/>
+        <input id="email-input" type="text" style={{width:'100%', padding:'8px', marginTop:'4px'}} />
       </div>
+      <div style={{marginBottom: '1rem'}}>
+        <label>Şifre</label><br/>
+        <input id="password-input" type="password" style={{width:'100%', padding:'8px', marginTop:'4px'}} />
+      </div>
+      <button onClick={handleLogin} style={{width:'100%', padding:'10px', background:'#2563eb', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer'}}>
+        Giriş yap
+      </button>
     </div>
   )
 }
