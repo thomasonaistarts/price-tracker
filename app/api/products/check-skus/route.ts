@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ existing: [], new_skus: skus ?? [] })
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient() as any
   const { data } = await supabase
     .from('products')
     .select('sku')

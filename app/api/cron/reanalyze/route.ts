@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now()
   const budgetMs = (maxDuration - SAFETY_BUFFER_S) * 1000
 
-  const supabase = createAdminClient()
+  const supabase = createAdminClient() as any
 
   // Toplam aktif ürün sayısına göre döngü süresi hesapla
   // Günlük kapasite: 12 çalışma × CONCURRENT × (280s / SECONDS_PER_BATCH) ürün
