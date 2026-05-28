@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Her kullanıcının eşleşme hassasiyeti ayarlarını önceden çek (cache)
-  const uniqueUserIds = Array.from(new Set(products.map((p: { user_id: string }) => p.user_id)))
+  const uniqueUserIds: string[] = Array.from(new Set(products.map((p: any) => p.user_id as string)))
   const userConfidenceMap = new Map<string, ConfidenceThresholds>()
   await Promise.all(
     uniqueUserIds.map(async (uid: string) => {
