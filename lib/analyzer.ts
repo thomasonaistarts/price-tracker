@@ -1,13 +1,7 @@
 import type { ProductInput } from '@/lib/validations'
+import { scrapeAllPlatforms, type ScrapedPrice, type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS } from '@/lib/scrapers'
 
-export interface MarketSource {
-  site: string
-  product_url: string
-  unit_price: number
-  price_type: 'kdv_dahil' | 'kdv_hariç' | 'unknown'
-  timestamp: string
-  match_confidence: number
-}
+export type { ScrapedPrice }
 
 export interface AnalysisResult {
   sku: string
@@ -22,7 +16,7 @@ export interface AnalysisResult {
   min_price: number | null
   max_price: number | null
   sources_count: number
-  sources: MarketSource[]
+  sources: ScrapedPrice[]
   price_diff_percent: number | null
   alert: 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
   alert_reason: string
@@ -31,25 +25,10 @@ export interface AnalysisResult {
   notes: string[]
 }
 
-const PLATFORMS = [
-  'Hepsiburada', 'Trendyol', 'n11', 'Amazon TR', 'Kitapyurdu',
-  'CarrefourSA', 'PTTAVM', 'Vatan', 'Bıyıklıoğlu', 'Kırtasiyem Online',
-]
-
-const CAT_VARIATIONS: Record<string, number[]> = {
-  'Kalem':       [0.82, 0.87, 0.91, 0.95, 0.98, 1.02, 1.06, 1.11, 1.16, 1.22],
-  'Defter':      [0.79, 0.85, 0.90, 0.94, 0.97, 1.01, 1.05, 1.10, 1.15, 1.20],
-  'Silgi':       [0.75, 0.82, 0.88, 0.93, 0.97, 1.03, 1.08, 1.13, 1.19, 1.25],
-  'Kalemtıraş':  [0.78, 0.84, 0.89, 0.93, 0.97, 1.02, 1.06, 1.11, 1.16, 1.21],
-  'Not Kağıdı':  [0.80, 0.86, 0.91, 0.95, 0.98, 1.02, 1.06, 1.11, 1.17, 1.23],
-  'Ambalaj':     [0.77, 0.83, 0.88, 0.93, 0.97, 1.03, 1.07, 1.12, 1.18, 1.24],
-  'Klasör':      [0.81, 0.87, 0.91, 0.95, 0.98, 1.02, 1.06, 1.10, 1.15, 1.20],
-  'Bant':        [0.76, 0.83, 0.89, 0.94, 0.98, 1.03, 1.07, 1.13, 1.19, 1.25],
-}
-
 function r2(n: number) { return Math.round(n * 100) / 100 }
 
 function iqrFilter(arr: number[]): number[] {
+  if (arr.length < 4) return arr
   const s = [...arr].sort((a, b) => a - b)
   const q1 = s[Math.floor(s.length * 0.25)]
   const q3 = s[Math.floor(s.length * 0.75)]
@@ -57,32 +36,18 @@ function iqrFilter(arr: number[]): number[] {
   return arr.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr)
 }
 
-function simulateMarket(ourPrice: number, category: string): MarketSource[] {
-  const mults = CAT_VARIATIONS[category] ?? [0.80, 0.86, 0.91, 0.95, 0.98, 1.02, 1.06, 1.11, 1.17, 1.23]
-  const shuffled = [...PLATFORMS].sort(() => Math.random() - 0.5)
-  const ts = new Date().toISOString()
-  return shuffled.map((site, i) => ({
-    site,
-    product_url: `https://${site.toLowerCase().replace(/\s+/g, '')}.com.tr/urun/${Math.floor(Math.random() * 9e6 + 1e6)}`,
-    unit_price: r2(ourPrice * mults[i]),
-    price_type: 'kdv_dahil',
-    timestamp: ts,
-    match_confidence: r2(0.70 + Math.random() * 0.28),
-  }))
-}
-
-// TODO: Gerçek scraping/API entegrasyonu burada yapılacak
-// simulateMarket() yerine aşağıdaki gibi bir fonksiyon çağrılacak:
-// async function fetchRealPrices(product: ProductInput): Promise<MarketSource[]>
-
-export function analyzeProduct(
+export async function analyzeProduct(
   product: ProductInput,
   thresholdPercent: number,
   minSources: number,
-): AnalysisResult {
-  const { sku, product_name, category = 'Genel', brand = '', our_price } = product
-  const sources = simulateMarket(our_price, category)
-  const prices = sources.map(s => s.unit_price)
+  confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+): Promise<AnalysisResult> {
+  const { sku, product_name, category = '', brand = '', our_price } = product
+
+  // Gerçek rakip fiyatları scrape et
+  const sources = await scrapeAllPlatforms(product_name, confidenceThresholds)
+
+  const prices = sources.map(s => s.price).filter(p => p > 0)
   const filtered = iqrFilter(prices)
 
   if (filtered.length < minSources) {
@@ -90,14 +55,19 @@ export function analyzeProduct(
       sku, product_name, category, brand, our_price,
       threshold_used: thresholdPercent,
       market_mean: null, market_median: null, market_std: null,
-      min_price: null, max_price: null,
+      min_price: prices.length ? r2(Math.min(...prices)) : null,
+      max_price: prices.length ? r2(Math.max(...prices)) : null,
       sources_count: sources.length, sources,
       price_diff_percent: null,
       alert: 'insufficient_data',
-      alert_reason: `Yalnızca ${filtered.length} güvenilir kaynak bulundu (min: ${minSources})`,
-      follow_up: ['manual_review', 'fetch_more_sources'],
-      confidence: 0.4,
-      notes: [`IQR sonrası ${filtered.length} kaynak kaldı`],
+      alert_reason: sources.length === 0
+        ? 'Rakip sitelerden fiyat bilgisi alınamadı'
+        : `Yalnızca ${filtered.length} güvenilir kaynak bulundu (min: ${minSources})`,
+      follow_up: ['manuel_kontrol', 'daha_fazla_kaynak'],
+      confidence: 0.2,
+      notes: sources.length === 0
+        ? ['Scraper sonuç döndürmedi — ürün adını kontrol edin veya daha sonra tekrar deneyin']
+        : [`IQR filtreleme sonrası ${filtered.length} kaynak kaldı`],
     }
   }
 
@@ -116,13 +86,15 @@ export function analyzeProduct(
     if (diff > 0) {
       alert = 'above_market'
       alert_reason = `Piyasa ortalamasının %${absD.toFixed(1)} üzerinde (eşik: %${thresholdPercent})`
-      follow_up = ['notify_owner', 'manual_review', 'auto_reprice_on']
+      follow_up = ['fiyat_indirimi_düşün', 'manuel_kontrol']
     } else {
       alert = 'below_market'
       alert_reason = `Piyasa ortalamasının %${absD.toFixed(1)} altında (eşik: %${thresholdPercent})`
-      follow_up = ['notify_owner', 'manual_review']
+      follow_up = ['fiyat_artışı_mümkün', 'manuel_kontrol']
     }
   }
+
+  const confidence = r2(Math.min(0.95, 0.5 + filtered.length * 0.08))
 
   return {
     sku, product_name, category, brand, our_price,
@@ -132,19 +104,29 @@ export function analyzeProduct(
     sources_count: sources.length, sources,
     price_diff_percent: diff,
     alert, alert_reason, follow_up,
-    confidence: r2(0.72 + Math.random() * 0.2),
-    notes: [`Kategori eşiği: %${thresholdPercent}`, 'Simüle edilmiş veri — gerçek scraping entegrasyonu gerekli'],
+    confidence,
+    notes: [`${sources.length} fiyat kaynağı tarandı (Hepsiburada, N11, PTTAvm, İdefix, Trendyol)`],
   }
 }
 
-export function runAnalysis(
+export async function runAnalysis(
   products: ProductInput[],
   thresholdPercent: number,
   minSources: number,
   categoryThresholds?: Record<string, number>,
-): AnalysisResult[] {
-  return products.map(p => {
-    const thr = categoryThresholds?.[p.category ?? 'Genel'] ?? thresholdPercent
-    return analyzeProduct(p, thr, minSources)
-  })
+  confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+): Promise<AnalysisResult[]> {
+  const BATCH = 3
+  const results: AnalysisResult[] = []
+  for (let i = 0; i < products.length; i += BATCH) {
+    const batch = products.slice(i, i + BATCH)
+    const batchResults = await Promise.all(
+      batch.map(p => {
+        const thr = categoryThresholds?.[p.category ?? ''] ?? thresholdPercent
+        return analyzeProduct(p, thr, minSources, confidenceThresholds)
+      })
+    )
+    results.push(...batchResults)
+  }
+  return results
 }

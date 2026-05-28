@@ -35,6 +35,7 @@ export interface Database {
           is_active: boolean
           created_at: string
           updated_at: string
+          last_analyzed_at: string | null
         }
         Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['products']['Insert']>
@@ -92,3 +93,39 @@ export type User = Database['public']['Tables']['users']['Row']
 export type Product = Database['public']['Tables']['products']['Row']
 export type PriceAnalysis = Database['public']['Tables']['price_analyses']['Row']
 export type CategoryThreshold = Database['public']['Tables']['category_thresholds']['Row']
+
+// Kullanıcı ayarları — JSONB içeriği
+export interface UserSettings {
+  // Fiyat analizi
+  default_threshold_percent: number    // varsayılan uyarı eşiği, default: 10
+  min_sources: number                  // minimum kaynak sayısı, default: 2
+  outlier_filter_pct: number           // fiyat outlier filtresi %, default: 50
+
+  // Aktif platformlar
+  active_platforms: string[]           // default: tüm 5 platform
+
+  // E-posta bildirimleri
+  weekly_report_enabled: boolean       // default: true
+  weekly_report_day: number            // 0=Paz … 6=Cmt, default: 1 (Pzt)
+  weekly_report_hour: number           // 0-23, default: 8
+
+  // Eşleşme hassasiyeti (0-100 tam sayı → score = değer / 100)
+  confidence_exact: number             // default: 95  → ⭐ Tam eşleşme
+  confidence_high: number              // default: 75  → ✓ Yüksek eşleşme
+  confidence_medium: number            // default: 58  → ⚠ Orta eşleşme
+  confidence_low: number               // default: 42  → ↓ Düşük eşleşme
+}
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  default_threshold_percent: 10,
+  min_sources: 2,
+  outlier_filter_pct: 50,
+  active_platforms: ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol'],
+  weekly_report_enabled: true,
+  weekly_report_day: 1,
+  weekly_report_hour: 8,
+  confidence_exact: 95,
+  confidence_high: 75,
+  confidence_medium: 58,
+  confidence_low: 42,
+}

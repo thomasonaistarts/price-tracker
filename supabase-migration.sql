@@ -191,6 +191,24 @@ create index idx_analyses_alert on public.price_analyses(alert);
 create index idx_thresholds_user_id on public.category_thresholds(user_id);
 
 -- -----------------------------------------------
+-- user_settings tablosu
+-- Kullanıcı başına sistem ayarları (JSONB)
+-- -----------------------------------------------
+create table public.user_settings (
+  user_id    uuid primary key references public.users(id) on delete cascade,
+  settings   jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+create trigger trg_user_settings_updated_at
+  before update on public.user_settings
+  for each row execute function update_updated_at();
+
+alter table public.user_settings enable row level security;
+create policy "user_settings_own" on public.user_settings
+  for all using (user_id = auth.uid());
+
+-- -----------------------------------------------
 -- İlk admin kullanıcı oluşturma
 -- Supabase Dashboard > Authentication > Users'dan
 -- kullanıcı oluşturduktan sonra aşağıdaki sorguyu çalıştırın:

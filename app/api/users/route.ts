@@ -17,8 +17,28 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password, full_name, role } = parsed.data
-  const supabase = await createAdminClient() as any
+  const supabase = createAdminClient() as any
 
+  // public.users'da aynı email varsa (trigger çakışmasını önlemek için) temizle
+  // Bu durum: auth.users'da olmayan ama public.users'da kalan stale kayıt
+  const { data: existingProfile } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (existingProfile) {
+    // auth.users'da bu id var mı kontrol et
+    const { data: authCheck } = await supabase.auth.admin.getUserById(existingProfile.id)
+    if (!authCheck?.user) {
+      // auth.users'da yok ama public.users'da var → stale satır, temizle
+      await supabase.from('users').delete().eq('id', existingProfile.id)
+    } else {
+      return NextResponse.json({ error: 'Bu e-posta adresi zaten kullanımda.' }, { status: 409 })
+    }
+  }
+
+  // Auth kullanıcısını oluştur
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -30,12 +50,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authError.message }, { status: 400 })
   }
 
+  // Trigger zaten public.users satırını oluşturmuş olabilir.
+  // Upsert ile role'ü garantiyle set et (UPDATE da yapar, INSERT da).
   const { error: profileError } = await supabase
     .from('users')
-    .update({ role })
-    .eq('id', authData.user.id)
+    .upsert(
+      { id: authData.user.id, email, full_name, role },
+      { onConflict: 'id' }
+    )
 
   if (profileError) {
+    // Profil oluşturulamadıysa auth kullanıcısını geri al
+    await supabase.auth.admin.deleteUser(authData.user.id)
     return NextResponse.json({ error: profileError.message }, { status: 500 })
   }
 
@@ -49,7 +75,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
   }
 
-  const supabase = await createAdminClient() as any
+  const supabase = createAdminClient() as any
 
   const { data, error } = await supabase
     .from('users')

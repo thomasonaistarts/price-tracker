@@ -19,18 +19,30 @@ export const updateUserSchema = z.object({
 })
 
 export const productSchema = z.object({
-  sku: z.string().min(1, 'SKU zorunlu'),
-  product_name: z.string().min(1, 'Ürün adı zorunlu'),
-  brand: z.string().optional(),
-  category: z.string().optional(),
-  our_price: z.number().positive('Fiyat sıfırdan büyük olmalı'),
-  currency: z.string().default('TRY'),
+  sku: z.coerce.string().min(1, 'SKU zorunlu'),
+  product_name: z.coerce.string().min(1, 'Ürün adı zorunlu'),
+  brand: z.coerce.string().optional(),
+  category: z.coerce.string().optional(),
+  // Excel'den string, number, currency-format ("150,00 ₺"), boş hücre gelebilir
+  our_price: z.preprocess((val) => {
+    if (val === null || val === undefined || val === '') return undefined
+    if (typeof val === 'number') return isNaN(val) ? undefined : val
+    // "1.234,56 ₺" veya "1,234.56" gibi formatları normalize et
+    const cleaned = String(val).replace(/[^\d.,]/g, '')
+    // Türkçe format: binlik ayracı nokta, ondalık virgül → "1.234,56" → "1234.56"
+    const normalized = cleaned.includes(',')
+      ? cleaned.replace(/\./g, '').replace(',', '.')
+      : cleaned
+    const n = parseFloat(normalized)
+    return isNaN(n) ? undefined : n
+  }, z.number({ required_error: 'our_price zorunlu' }).positive('our_price sıfırdan büyük olmalı')),
+  currency: z.coerce.string().default('TRY'),
 })
 
 export const analyzeSchema = z.object({
   products: z.array(productSchema),
   threshold_percent: z.number().min(1).max(50).default(10),
-  min_sources: z.number().min(1).max(10).default(5),
+  min_sources: z.number().min(1).max(10).default(2),
   category_thresholds: z.record(z.number()).optional(),
 })
 

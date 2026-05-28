@@ -38,7 +38,30 @@ cp .env.local.example .env.local
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+
+# ScraperAPI — https://www.scraperapi.com (ücretsiz: 5.000 istek/ay)
+SCRAPERAPI_KEY=...
+
+# Apify — https://console.apify.com/account/integrations
+APIFY_TOKEN=...
 ```
+
+### 3b. Resend (Haftalık e-posta raporu) — sonradan yapılacak
+
+> Haftalık fiyat raporu e-postası için gereklidir. Hemen yapmak zorunda değilsiniz.
+
+1. **API key al** → [resend.com/api-keys](https://resend.com/api-keys)
+2. **Domain doğrula** → [resend.com/domains](https://resend.com/domains) (DNS'e TXT + MX kaydı eklenir)
+   - Test aşamasında domain doğrulamadan `onboarding@resend.dev` adresi kullanılabilir
+3. `.env.local` ve Vercel Dashboard → Settings → Environment Variables'a ekle:
+
+```env
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
+RESEND_FROM=Fiyat Takip <noreply@siteniniz.com>
+```
+
+> E-posta her Pazartesi 08:00 (Türkiye saati) otomatik gönderilir.  
+> Manuel test için: `GET /api/cron/weekly-report`
 
 ### 4. İlk admin kullanıcıyı oluştur
 
