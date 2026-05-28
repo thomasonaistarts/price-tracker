@@ -23,6 +23,9 @@ export async function getUserProfile(userId: string): Promise<User | null> {
 export async function requireAdmin() {
   const authUser = await requireAuth()
   const profile = await getUserProfile(authUser.id)
+  console.log('requireAdmin - userId:', authUser.id)
+  console.log('requireAdmin - profile:', profile)
+  console.log('requireAdmin - role:', profile?.role)
   if (profile?.role !== 'admin') redirect('/dashboard')
   return { authUser, profile }
 }
