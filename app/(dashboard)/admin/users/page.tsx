@@ -1,9 +1,7 @@
-import { requireAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import UserTable from '@/components/admin/UserTable'
 
 export default async function AdminUsersPage() {
-  await requireAdmin()
   const supabase = await createAdminClient()
   const { data: users } = await supabase.from('users').select('*').order('created_at', { ascending: false })
   const userList = (users ?? []) as any[]
