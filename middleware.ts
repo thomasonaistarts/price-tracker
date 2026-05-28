@@ -28,17 +28,16 @@ export async function middleware(request: NextRequest) {
     if (!user) return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Bu bloğu geçici olarak yorum satırına alın
-// if (pathname.startsWith('/dashboard/admin')) {
-//   const { data: profile } = await supabase
-//     .from('users')
-//     .select('role')
-//     .eq('id', user!.id)
-//     .single()
-//   if (profile?.role !== 'admin') {
-//     return NextResponse.redirect(new URL('/dashboard', request.url))
-//   }
-// }
+  if (pathname.startsWith('/admin')) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user!.id)
+      .single()
+    if (profile?.role !== 'admin') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
 
   if (pathname === '/auth/login') {
     if (user) return NextResponse.redirect(new URL('/dashboard', request.url))
