@@ -21,9 +21,8 @@ export default async function ProductsPage() {
   ])
 
   // Her ürün için sadece en son analizi tut
-  type AnalysisRow = NonNullable<typeof analyses>[number]
-  const latestMap = new Map<string, AnalysisRow>()
-  for (const a of analyses ?? []) {
+  const latestMap = new Map<string, any>()
+  for (const a of (analyses ?? []) as any[]) {
     if (a && !latestMap.has(a.product_id)) latestMap.set(a.product_id, a)
   }
 
