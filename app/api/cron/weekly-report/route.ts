@@ -5,9 +5,11 @@ import { computeReportData, generateWeeklyEmailHtml } from '@/lib/email-report'
 
 export const maxDuration = 300
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function GET(req: NextRequest) {
+  if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 're_your_api_key_here') {
+    return NextResponse.json({ error: 'RESEND_API_KEY yapılandırılmamış' }, { status: 503 })
+  }
+  const resend = new Resend(process.env.RESEND_API_KEY)
   // Cron güvenlik kontrolü
   const secret = process.env.CRON_SECRET
   if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
