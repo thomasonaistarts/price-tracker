@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { User } from '@/types/database'
 
@@ -10,7 +10,7 @@ export async function requireAuth() {
 }
 
 export async function getUserProfile(userId: string): Promise<User | null> {
-  const supabase = await createClient()
+  const supabase = await createAdminClient()
   const { data, error } = await supabase
     .from('users')
     .select('*')
