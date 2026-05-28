@@ -42,7 +42,7 @@ export default async function ProductsPage() {
       </div>
       <ProductsClient
         products={(products ?? []) as Product[]}
-        latestAnalyses={[...latestMap.values()] as any}
+        latestAnalyses={Array.from(latestMap.values()) as any}
       />
     </div>
   )
