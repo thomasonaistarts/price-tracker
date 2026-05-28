@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     .eq('user_id', userId)
     .in('sku', skus)
 
-  const existingSet = new Set((data ?? []).map(p => p.sku))
+  const existingSet = new Set((data ?? []).map((p: any) => p.sku as string))
   return NextResponse.json({
     existing: skus.filter(s => existingSet.has(s)),
     new_skus: skus.filter(s => !existingSet.has(s)),
