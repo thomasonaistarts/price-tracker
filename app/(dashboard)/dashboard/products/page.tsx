@@ -1,6 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth'
 
+interface Product {
+  id: string
+  sku: string
+  product_name: string
+  brand: string | null
+  category: string | null
+  our_price: number
+  currency: string | null
+  is_active: boolean
+  created_at: string
+}
+
 export default async function ProductsPage() {
   const user = await requireAuth()
   const supabase = await createClient()
@@ -11,16 +23,18 @@ export default async function ProductsPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
+  const productList = (products ?? []) as Product[]
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-medium text-gray-900">Ürünler</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{products?.length ?? 0} ürün</p>
+          <p className="text-sm text-gray-500 mt-0.5">{productList.length} ürün</p>
         </div>
       </div>
 
-      {!products || products.length === 0 ? (
+      {productList.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <div className="text-4xl mb-3">📦</div>
           <h3 className="text-sm font-medium text-gray-900 mb-1">Henüz ürün yok</h3>
@@ -45,7 +59,7 @@ export default async function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {products.map((p) => (
+                {productList.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50">
                     <td className="px-6 py-3 font-mono text-xs text-gray-500">{p.sku}</td>
                     <td className="px-6 py-3 text-gray-900 font-medium">{p.product_name}</td>
