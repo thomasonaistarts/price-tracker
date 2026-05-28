@@ -23,7 +23,7 @@ export default function NewUserPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      router.push('/dashboard/admin/users')
+      router.push('/admin/users')
       router.refresh()
     } catch (err: any) {
       setError(err.message)
@@ -65,7 +65,7 @@ export default function NewUserPage() {
             <button type="button" onClick={handleSubmit} disabled={loading} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
               {loading ? 'Oluşturuluyor...' : 'Kullanıcı oluştur'}
             </button>
-            <a href="/dashboard/admin/users" className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+            <a href="/admin/users" className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
               İptal
             </a>
           </div>
