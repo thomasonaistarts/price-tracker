@@ -102,16 +102,17 @@ function parsePasteText(text: string): PasteRow[] {
     .map(line => {
       // Ayraç önceliği: tab > noktalı virgül > virgül
       const sep = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ','
-      const [sku = '', product_name = '', our_price = '', category = '', brand = ''] =
+      // Sütun sırası: Ürün Adı | SKU | Kategori | Fiyat | Marka
+      const [product_name = '', sku = '', category = '', our_price = '', brand = ''] =
         line.split(sep).map(p => p.trim())
       const price = parseFloat(our_price.replace(',', '.').replace(/[^\d.]/g, ''))
-      const valid = sku.length > 0 && product_name.length > 0 && !isNaN(price) && price > 0
+      const valid = product_name.length > 0 && sku.length > 0 && !isNaN(price) && price > 0
       return {
         sku, product_name, our_price: our_price || '',
         category: category || undefined, brand: brand || undefined,
         currency: 'TRY', valid,
         error: !valid
-          ? (!sku ? 'SKU boş' : !product_name ? 'Ürün adı boş' : 'Geçersiz fiyat')
+          ? (!product_name ? 'Ürün adı boş' : !sku ? 'SKU boş' : 'Geçersiz fiyat')
           : undefined,
       }
     })
@@ -383,13 +384,14 @@ export default function AnalyzePage() {
                   className="block w-full text-sm text-gray-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-900/30 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50 disabled:opacity-50"
                 />
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
-                  Zorunlu sütunlar:{' '}
-                  <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">sku</code>{' '}
+                  Önerilen sütun sırası:{' '}
                   <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">product_name</code>{' '}
+                  <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">sku</code>{' '}
+                  <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">category</code>{' '}
                   <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">our_price</code>
                   {' '}· İsteğe bağlı:{' '}
-                  <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">category</code>{' '}
                   <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">brand</code>
+                  {' '}· CSV/Excel için sütun adı yeterli, sıra önemli değil.
                 </p>
               </div>
             )}
@@ -397,38 +399,6 @@ export default function AnalyzePage() {
             {/* ── MOD: Tek ürün ── */}
             {mode === 'single' && (
               <form onSubmit={handleSingleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* SKU */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
-                      SKU <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={single.sku}
-                      onChange={e => { setSingle(s => ({ ...s, sku: e.target.value })); setSingleErrors(se => ({ ...se, sku: undefined })) }}
-                      placeholder="SKU-001"
-                      className={inputCls}
-                    />
-                    {singleErrors.sku && <p className="text-xs text-red-500 mt-1">{singleErrors.sku}</p>}
-                  </div>
-
-                  {/* Fiyat */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
-                      Bizim fiyatımız (₺) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={single.our_price}
-                      onChange={e => { setSingle(s => ({ ...s, our_price: e.target.value })); setSingleErrors(se => ({ ...se, our_price: undefined })) }}
-                      placeholder="1299.90"
-                      className={inputCls}
-                    />
-                    {singleErrors.our_price && <p className="text-xs text-red-500 mt-1">{singleErrors.our_price}</p>}
-                  </div>
-                </div>
 
                 {/* Ürün adı */}
                 <div>
@@ -446,6 +416,21 @@ export default function AnalyzePage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* SKU */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                      SKU <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={single.sku}
+                      onChange={e => { setSingle(s => ({ ...s, sku: e.target.value })); setSingleErrors(se => ({ ...se, sku: undefined })) }}
+                      placeholder="SKU-001"
+                      className={inputCls}
+                    />
+                    {singleErrors.sku && <p className="text-xs text-red-500 mt-1">{singleErrors.sku}</p>}
+                  </div>
+
                   {/* Kategori */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
@@ -458,6 +443,24 @@ export default function AnalyzePage() {
                       placeholder="Elektronik"
                       className={inputCls}
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Bizim Fiyat */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                      Bizim fiyatımız (₺) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={single.our_price}
+                      onChange={e => { setSingle(s => ({ ...s, our_price: e.target.value })); setSingleErrors(se => ({ ...se, our_price: undefined })) }}
+                      placeholder="1299.90"
+                      className={inputCls}
+                    />
+                    {singleErrors.our_price && <p className="text-xs text-red-500 mt-1">{singleErrors.our_price}</p>}
                   </div>
 
                   {/* Marka */}
@@ -519,17 +522,16 @@ export default function AnalyzePage() {
                     placeholder={
                       'Excel\'den veya başka kaynaktan kopyalayıp buraya yapıştırın.\n' +
                       'Her satır bir ürün. Sütun sırası:\n' +
-                      '  SKU  |  Ürün Adı  |  Fiyat  |  Kategori (opsiyonel)  |  Marka (opsiyonel)\n\n' +
+                      '  Ürün Adı  |  SKU  |  Kategori (opsiyonel)  |  Fiyat  |  Marka (opsiyonel)\n\n' +
                       'Örnek:\n' +
-                      'SKU-001\tApple iPhone 15 128GB\t29999\tTelefon\tApple\n' +
-                      'SKU-002\tSamsung Galaxy A54\t12499\tTelefon'
+                      'Apple iPhone 15 128GB\tSKU-001\tTelefon\t29999\tApple\n' +
+                      'Samsung Galaxy A54\tSKU-002\tTelefon\t12499'
                     }
                     className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
                     disabled={loading}
                   />
                   <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
-                    Ayraç olarak <strong>sekme</strong> (Excel yapıştır), <strong>;</strong> veya <strong>,</strong> desteklenir.
-                    Zorunlu: SKU, Ürün Adı, Fiyat
+                    Ayraç: <strong>sekme</strong> (Excel), <strong>;</strong> veya <strong>,</strong> · Zorunlu: Ürün Adı, SKU, Fiyat
                   </p>
                 </div>
 
