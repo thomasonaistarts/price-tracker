@@ -78,6 +78,26 @@ export async function analyzeProduct(
   const diff = r2((our_price - mean) / mean * 100)
   const absD = Math.abs(diff)
 
+  // Fiyat farkı %250'yi aşıyorsa büyük ihtimalle yanlış ürün eşleşmesi — yetersiz veri say
+  if (diff > 250) {
+    return {
+      sku, product_name, category, brand, our_price,
+      threshold_used: thresholdPercent,
+      market_mean: mean, market_median: median, market_std: std,
+      min_price: r2(Math.min(...prices)), max_price: r2(Math.max(...prices)),
+      sources_count: sources.length, sources,
+      price_diff_percent: diff,
+      alert: 'insufficient_data',
+      alert_reason: `Fiyat farkı %${diff.toFixed(0)} — muhtemelen yanlış ürün eşleşmesi`,
+      follow_up: ['manuel_kontrol', 'ürün_adını_güncelle'],
+      confidence: 0.1,
+      notes: [
+        `Bizim fiyatımız (₺${our_price}) piyasa ortalamasının (₺${mean}) %${diff.toFixed(0)} üzerinde.`,
+        'Bu oran %250 eşiğini aştığı için sonuçlar güvenilir sayılmıyor — eşleşen ürünler farklı olabilir.',
+      ],
+    }
+  }
+
   let alert: AnalysisResult['alert'] = 'no_alert'
   let alert_reason = 'Fiyat piyasa ortalamasında'
   let follow_up: string[] = []
