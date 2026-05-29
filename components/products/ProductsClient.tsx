@@ -225,8 +225,8 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
     }
   }
 
-  const inputCls = 'border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-  const selectCls = `px-2 py-1 ${inputCls} text-gray-700 dark:text-slate-200`
+  const inputCls = 'border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const selectCls = `px-2 py-1 ${inputCls}`
 
   if (localProducts.length === 0) {
     return (

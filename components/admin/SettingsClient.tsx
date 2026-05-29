@@ -15,7 +15,7 @@ interface Props {
 
 type SectionKey = 'analiz' | 'platformlar' | 'email' | 'eslesme'
 
-const inputCls = 'w-full px-3 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+const inputCls = 'w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export default function SettingsClient({ initialSettings, initialThresholds, productCategories }: Props) {
   const [settings, setSettings] = useState(initialSettings)

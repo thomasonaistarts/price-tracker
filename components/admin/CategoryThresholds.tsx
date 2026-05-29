@@ -116,7 +116,7 @@ export default function CategoryThresholds({ initialThresholds }: Props) {
                 value={form.category}
                 onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
                 placeholder="örn. Kalem"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <datalist id="category-suggestions">
                 {CATEGORY_SUGGESTIONS.map(c => <option key={c} value={c} />)}

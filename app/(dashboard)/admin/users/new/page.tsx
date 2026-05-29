@@ -79,8 +79,8 @@ export default function NewUserPage() {
               type="text"
               value={form.full_name}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                fieldErrors.full_name ? 'border-red-400' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 ${
+                fieldErrors.full_name ? 'border-red-400' : 'border-gray-300 dark:border-slate-600'
               }`}
               placeholder="Ahmet Yılmaz"
             />
@@ -95,8 +95,8 @@ export default function NewUserPage() {
               type="email"
               value={form.email}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                fieldErrors.email ? 'border-red-400' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                fieldErrors.email ? 'border-red-400' : 'border-gray-300 dark:border-slate-600'
               }`}
               placeholder="ahmet@sirket.com"
             />
@@ -111,8 +111,8 @@ export default function NewUserPage() {
               type="password"
               value={form.password}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                fieldErrors.password ? 'border-red-400' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                fieldErrors.password ? 'border-red-400' : 'border-gray-300 dark:border-slate-600'
               }`}
               placeholder="En az 8 karakter"
             />
@@ -126,7 +126,7 @@ export default function NewUserPage() {
               name="role"
               value={form.role}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="user">Kullanıcı</option>
               <option value="admin">Admin</option>
