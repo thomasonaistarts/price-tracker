@@ -16,6 +16,8 @@ interface NavItem {
 interface SidebarProps {
   role: UserRole
   user: User | null
+  isOpen?: boolean
+  onClose?: () => void
 }
 
 // ── SVG İkonları ──────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ function itemActive(pathname: string, item: NavItem) {
 
 // ── Bileşen ───────────────────────────────────────────────────────────────────
 
-export default function Sidebar({ role, user }: SidebarProps) {
+export default function Sidebar({ role, user, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -113,6 +115,7 @@ export default function Sidebar({ role, user }: SidebarProps) {
     return (
       <Link
         href={item.href}
+        onClick={onClose}
         className={[
           'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150 group relative',
           active
@@ -132,7 +135,28 @@ export default function Sidebar({ role, user }: SidebarProps) {
   }
 
   return (
-    <aside className="w-56 flex flex-col h-full flex-shrink-0 bg-slate-900">
+    <aside className={[
+      'flex flex-col h-full flex-shrink-0 bg-slate-900 z-30',
+      // Desktop: always visible static
+      'lg:relative lg:translate-x-0 lg:w-56',
+      // Mobile: fixed drawer, slides in/out
+      'fixed inset-y-0 left-0 w-72',
+      isOpen ? 'translate-x-0' : '-translate-x-full',
+      'transition-transform duration-200 ease-in-out lg:transition-none',
+    ].join(' ')}>
+
+      {/* ── Mobile kapat butonu ── */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="lg:hidden absolute top-3 right-3 p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/10 transition-colors"
+          aria-label="Menüyü kapat"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
 
       {/* ── Logo ── */}
       <div className="px-4 pt-5 pb-4">

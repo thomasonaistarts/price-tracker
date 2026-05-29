@@ -145,7 +145,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
 
       {/* ── Başlık ── */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">
             Merhaba, {profile?.full_name?.split(' ')[0] ?? 'Kullanıcı'} 👋

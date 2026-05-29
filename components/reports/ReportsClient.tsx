@@ -72,7 +72,8 @@ export default function ReportsClient({ analyses, history }: Props) {
   return (
     <div>
       {/* Tab navigasyon */}
-      <div className="flex gap-1 mb-5 bg-gray-100 dark:bg-slate-700 p-1 rounded-xl w-fit">
+      <div className="overflow-x-auto pb-1 mb-5">
+      <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 p-1 rounded-xl w-fit min-w-max">
         {([
           { key: 'summary',  label: '📊 Özet & Aksiyon' },
           { key: 'category', label: '🗂 Kategori' },
@@ -91,6 +92,7 @@ export default function ReportsClient({ analyses, history }: Props) {
             {t.label}
           </button>
         ))}
+      </div>
       </div>
 
       {tab === 'summary'  && <SummaryTab  rows={valid} />}

@@ -309,7 +309,7 @@ export default function AnalyzePage() {
     <>
       {/* ── Analiz uyarı banner'ı ── */}
       {loading && (
-        <div className="fixed top-0 left-56 right-0 z-50 bg-amber-500 dark:bg-amber-600 text-white text-center text-xs py-2 px-4 flex items-center justify-center gap-2 shadow-md">
+        <div className="fixed top-0 left-0 lg:left-56 right-0 z-50 bg-amber-500 dark:bg-amber-600 text-white text-center text-xs py-2 px-4 flex items-center justify-center gap-2 shadow-md">
           <svg className="w-3.5 h-3.5 flex-shrink-0 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
           </svg>

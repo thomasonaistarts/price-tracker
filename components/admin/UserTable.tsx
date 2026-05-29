@@ -27,7 +27,8 @@ export default function UserTable({ users: initialUsers }: UserTableProps) {
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[640px]">
         <thead>
           <tr className="border-b border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-700/50">
             <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wide">Kullanıcı</th>
@@ -99,6 +100,7 @@ export default function UserTable({ users: initialUsers }: UserTableProps) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
