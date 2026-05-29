@@ -14,7 +14,7 @@ const TIMEOUT = {
   n11:         12_000,
   pttavm:      12_000,
   idefix:      12_000,
-  trendyol:     8_000,  // Apify geotargeting sorunu — kısa timeout ile hızlı geç
+  trendyol:    35_000,  // Apify run-sync ~15-35s
 }
 
 function withTimeout<T>(promise: Promise<T>, fallback: T, ms: number): Promise<T> {
