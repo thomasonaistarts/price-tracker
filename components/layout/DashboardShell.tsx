@@ -51,6 +51,7 @@ export default function DashboardShell({ role, user, children }: Props) {
               </svg>
             </div>
             <span className="text-white text-sm font-semibold">Fiyatlaa</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold tracking-wider border border-blue-500/30 leading-none">BETA</span>
           </div>
         </header>
 

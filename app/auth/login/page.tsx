@@ -36,7 +36,10 @@ export default function LoginPage() {
             </svg>
           </div>
           <div>
-            <p className="text-white font-semibold text-[15px] leading-none">Fiyatlaa</p>
+            <div className="flex items-center gap-2">
+              <p className="text-white font-semibold text-[15px] leading-none">Fiyatlaa</p>
+              <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold tracking-wider border border-blue-500/30">BETA</span>
+            </div>
             <p className="text-slate-400 text-xs mt-0.5">Türkiye pazar analizi</p>
           </div>
         </div>
@@ -179,6 +182,7 @@ export default function LoginPage() {
               </svg>
             </div>
             <span className="font-bold text-gray-900 text-xl">Fiyatlaa</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold tracking-wider border border-blue-200">BETA</span>
           </div>
           <p className="text-gray-500 text-sm">Türkiye pazar fiyat analizi</p>
         </div>

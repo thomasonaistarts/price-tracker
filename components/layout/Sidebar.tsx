@@ -166,10 +166,11 @@ export default function Sidebar({ role, user, isOpen = false, onClose }: Sidebar
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
             </svg>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             <div className="text-sm font-semibold text-white leading-tight">Fiyatlaa</div>
-            <div className="text-[10px] text-slate-500 leading-tight">Piyasa takip paneli</div>
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold tracking-wider border border-blue-500/30 leading-none">BETA</span>
           </div>
+          <div className="text-[10px] text-slate-500 leading-tight">Piyasa takip paneli</div>
         </div>
       </div>
 
