@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       break
     }
     const batch = products.slice(i, i + BATCH)
-    const batchResults = await runAnalysis(batch, threshold_percent, min_sources, category_thresholds, confidenceThresholds)
+    const batchResults = await runAnalysis(batch, threshold_percent, min_sources, category_thresholds, confidenceThresholds, settings.outlier_upper_pct ?? 250)
     results.push(...batchResults)
   }
 

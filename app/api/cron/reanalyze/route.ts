@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
   // Her kullanıcının eşleşme hassasiyeti ayarlarını önceden çek (cache)
   const uniqueUserIds: string[] = Array.from(new Set(products.map((p: any) => p.user_id as string)))
   const userConfidenceMap = new Map<string, ConfidenceThresholds>()
+  const userUpperOutlierMap = new Map<string, number>()
   await Promise.all(
     uniqueUserIds.map(async (uid: string) => {
       const s = await getUserSettings(uid)
@@ -62,6 +63,7 @@ export async function GET(req: NextRequest) {
         medium: s.confidence_medium / 100,
         low:    s.confidence_low    / 100,
       })
+      userUpperOutlierMap.set(uid, s.outlier_upper_pct ?? 250)
     })
   )
 
@@ -83,7 +85,8 @@ export async function GET(req: NextRequest) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       batch.map((product: any) => {
         const confThr = userConfidenceMap.get(product.user_id)
-        return analyzeProduct(product, 10, 2, confThr)
+        const upperPct = userUpperOutlierMap.get(product.user_id) ?? 250
+        return analyzeProduct(product, 10, 2, confThr, upperPct)
       })
     )
 

@@ -41,6 +41,7 @@ export async function analyzeProduct(
   thresholdPercent: number,
   minSources: number,
   confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+  upperOutlierPct = 250,
 ): Promise<AnalysisResult> {
   const { sku, product_name, category = '', brand = '', our_price } = product
 
@@ -78,8 +79,8 @@ export async function analyzeProduct(
   const diff = r2((our_price - mean) / mean * 100)
   const absD = Math.abs(diff)
 
-  // Fiyat farkı %250'yi aşıyorsa büyük ihtimalle yanlış ürün eşleşmesi — yetersiz veri say
-  if (diff > 250) {
+  // Fiyat farkı üst eşiği aşıyorsa büyük ihtimalle yanlış ürün eşleşmesi — yetersiz veri say
+  if (diff > upperOutlierPct) {
     return {
       sku, product_name, category, brand, our_price,
       threshold_used: thresholdPercent,
@@ -88,7 +89,7 @@ export async function analyzeProduct(
       sources_count: sources.length, sources,
       price_diff_percent: diff,
       alert: 'insufficient_data',
-      alert_reason: `Fiyat farkı %${diff.toFixed(0)} — muhtemelen yanlış ürün eşleşmesi`,
+      alert_reason: `Fiyat farkı %${diff.toFixed(0)} (eşik: %${upperOutlierPct}) — muhtemelen yanlış ürün eşleşmesi`,
       follow_up: ['manuel_kontrol', 'ürün_adını_güncelle'],
       confidence: 0.1,
       notes: [
@@ -135,6 +136,7 @@ export async function runAnalysis(
   minSources: number,
   categoryThresholds?: Record<string, number>,
   confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+  upperOutlierPct = 250,
 ): Promise<AnalysisResult[]> {
   const BATCH = 5
   const results: AnalysisResult[] = []
@@ -143,7 +145,7 @@ export async function runAnalysis(
     const batchResults = await Promise.all(
       batch.map(p => {
         const thr = categoryThresholds?.[p.category ?? ''] ?? thresholdPercent
-        return analyzeProduct(p, thr, minSources, confidenceThresholds)
+        return analyzeProduct(p, thr, minSources, confidenceThresholds, upperOutlierPct)
       })
     )
     results.push(...batchResults)

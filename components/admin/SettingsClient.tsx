@@ -113,6 +113,7 @@ export default function SettingsClient({ initialSettings, initialThresholds, pro
                     default_threshold_percent: settings.default_threshold_percent,
                     min_sources: settings.min_sources,
                     outlier_filter_pct: settings.outlier_filter_pct,
+                    outlier_upper_pct: settings.outlier_upper_pct ?? 250,
                   }
                 : section === 'platformlar'
                 ? { active_platforms: settings.active_platforms }
@@ -224,6 +225,27 @@ export default function SettingsClient({ initialSettings, initialThresholds, pro
             </div>
             <p className="text-xs text-gray-400 dark:text-slate-500 mt-1.5">
               Medyan fiyatın bu yüzdesinin altındaki fiyatlar analiz dışı bırakılır
+            </p>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-slate-300">Üst fiyat sapma eşiği</label>
+              <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                Piyasa ort. %{settings.outlier_upper_pct ?? 250} üstü
+              </span>
+            </div>
+            <input
+              type="range" min={100} max={500} step={25}
+              value={settings.outlier_upper_pct ?? 250}
+              onChange={e => setSettings(s => ({ ...s, outlier_upper_pct: Number(e.target.value) }))}
+              className="w-full accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+              <span>%100 (katı)</span><span>%500 (gevşek)</span>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1.5">
+              Bizim fiyatımız piyasa ortalamasının bu kadar üzerindeyse yanlış ürün eşleşmesi sayılır
             </p>
           </div>
         </div>

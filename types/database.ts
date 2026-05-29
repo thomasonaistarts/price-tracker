@@ -99,7 +99,8 @@ export interface UserSettings {
   // Fiyat analizi
   default_threshold_percent: number    // varsayılan uyarı eşiği, default: 10
   min_sources: number                  // minimum kaynak sayısı, default: 2
-  outlier_filter_pct: number           // fiyat outlier filtresi %, default: 50
+  outlier_filter_pct: number           // alt aykırı filtresi %, default: 50 (medyanın %X altı)
+  outlier_upper_pct: number            // üst aykırı filtresi %, default: 250 (piyasa ort. %X üstü)
 
   // Aktif platformlar
   active_platforms: string[]           // default: tüm 5 platform
@@ -120,6 +121,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   default_threshold_percent: 10,
   min_sources: 2,
   outlier_filter_pct: 50,
+  outlier_upper_pct: 250,
   active_platforms: ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol'],
   weekly_report_enabled: true,
   weekly_report_day: 1,
