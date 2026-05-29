@@ -202,7 +202,7 @@ export default function LoginPage() {
                 id="email-input"
                 type="email"
                 autoComplete="email"
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-gray-300 bg-gray-50 focus:bg-white"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-gray-400"
                 placeholder="ad@sirket.com"
               />
             </div>
@@ -214,7 +214,7 @@ export default function LoginPage() {
                 id="password-input"
                 type="password"
                 autoComplete="current-password"
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-gray-300 bg-gray-50 focus:bg-white"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-gray-400"
                 placeholder="••••••••"
                 onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
               />
