@@ -231,7 +231,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
       a === 'above_market' ? 'Piyasa üstü' : a === 'below_market' ? 'Piyasa altı' : a === 'no_alert' ? 'Normal' : 'Veri yetersiz'
 
     const rows = filtered.map(p => {
-      const an = latestMap.get(p.id)
+      const an = analysisMap[p.id]
       return {
         'SKU':            p.sku,
         'Ürün Adı':       p.product_name,
