@@ -8,6 +8,8 @@ import { getUserSettings } from '@/lib/user-settings'
 // Vercel Pro: 300s max — ScraperAPI premium+render ~30s/ürün
 export const maxDuration = 300
 
+const BUDGET_MS = 255_000  // 255s — 45s güvenlik tamponu bırak
+
 // Excel/CSV kolon adlarını normalize et:
 // "SKU", " sku ", "Our Price", "our-price" → "sku", "our_price"
 function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -55,7 +57,23 @@ export async function POST(req: NextRequest) {
     low:    settings.confidence_low    / 100,
   }
 
-  const results = await runAnalysis(products, threshold_percent, min_sources, category_thresholds, confidenceThresholds)
+  const startedAt = Date.now()
+  const BATCH = 3
+  const results: Awaited<ReturnType<typeof runAnalysis>> = []
+  let skipped = 0
+
+  // Zaman bütçesine göre batch batch işle — timeout'tan önce dur
+  for (let i = 0; i < products.length; i += BATCH) {
+    if (Date.now() - startedAt > BUDGET_MS) {
+      skipped = products.length - i
+      break
+    }
+    const batch = products.slice(i, i + BATCH)
+    const batchResults = await runAnalysis(batch, threshold_percent, min_sources, category_thresholds, confidenceThresholds)
+    results.push(...batchResults)
+  }
+
+  const isPartial = skipped > 0
 
   const supabase = await createClient() as any
 
@@ -109,5 +127,7 @@ export async function POST(req: NextRequest) {
     products_checked: results.length,
     alerts_count: alertCount,
     results,
+    partial: isPartial,
+    skipped,
   })
 }

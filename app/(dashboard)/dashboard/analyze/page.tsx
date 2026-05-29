@@ -163,16 +163,38 @@ export default function AnalyzePage() {
   async function runAnalysis(products: unknown[]) {
     setLoading(true); setDupInfo(null)
     try {
-      setLoadingMsg(
-        `${products.length} ürün için 5 platform taranıyor... (~${Math.max(10, Math.round(products.length * 12))}s)`
-      )
+      const estSec = Math.max(15, Math.round(products.length * 12))
+      setLoadingMsg(`${products.length} ürün için platformlar taranıyor... (~${estSec}s)`)
+
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ products, threshold_percent: threshold, min_sources: 2 }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+
+      // Vercel timeout / 5xx durumunda plain-text HTML dönebilir — JSON değilse kullanıcı dostu mesaj göster
+      let data: any
+      try {
+        data = await res.json()
+      } catch {
+        if (!res.ok) {
+          throw new Error(
+            `Sunucu ${res.status} hatası döndürdü. ` +
+            (products.length > 20
+              ? `${products.length} ürün çok fazla olabilir — 15-20 ürüne bölüp tekrar deneyin.`
+              : 'Lütfen tekrar deneyin.')
+          )
+        }
+        throw new Error('Sunucudan geçersiz yanıt alındı. Lütfen tekrar deneyin.')
+      }
+
+      if (!res.ok) throw new Error(data.error ?? 'Analiz sırasında hata oluştu.')
+
+      // Kısmi sonuç varsa kullanıcıyı bilgilendir
+      if (data.partial) {
+        setError(`⚠ Zaman aşımı: ${data.results.length} ürün tamamlandı, ${data.skipped} ürün atlandı. Kalanları ayrı bir yüklemede analiz edin.`)
+      }
+
       setResults(data.results)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Analiz sırasında hata oluştu.')
