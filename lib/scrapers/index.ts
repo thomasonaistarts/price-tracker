@@ -8,12 +8,19 @@ import type { ScrapedPrice } from './types'
 
 export type { ScrapedPrice }
 
-const TIMEOUT_MS = 55000
+// Platform başına timeout — render gerektiren Hepsiburada daha uzun
+const TIMEOUT = {
+  hepsiburada: 30_000,  // render=true ~25-30s
+  n11:         12_000,
+  pttavm:      12_000,
+  idefix:      12_000,
+  trendyol:     8_000,  // Apify geotargeting sorunu — kısa timeout ile hızlı geç
+}
 
-function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, fallback: T, ms: number): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>(resolve => setTimeout(() => resolve(fallback), TIMEOUT_MS)),
+    new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms)),
   ])
 }
 
@@ -24,11 +31,11 @@ export async function scrapeAllPlatforms(
   thresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
 ): Promise<ScrapedPrice[]> {
   const [hepsiburada, n11, pttavm, idefix, trendyol] = await Promise.all([
-    withTimeout(scrapeHepsiburada(query), []),
-    withTimeout(scrapeN11(query), []),
-    withTimeout(scrapePttavm(query), []),
-    withTimeout(scrapeIdefix(query), []),
-    withTimeout(scrapeTrendyol(query), []),
+    withTimeout(scrapeHepsiburada(query), [], TIMEOUT.hepsiburada),
+    withTimeout(scrapeN11(query),         [], TIMEOUT.n11),
+    withTimeout(scrapePttavm(query),      [], TIMEOUT.pttavm),
+    withTimeout(scrapeIdefix(query),      [], TIMEOUT.idefix),
+    withTimeout(scrapeTrendyol(query),    [], TIMEOUT.trendyol),
   ])
 
   const all = [...hepsiburada, ...n11, ...pttavm, ...idefix, ...trendyol]

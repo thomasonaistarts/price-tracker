@@ -116,7 +116,7 @@ export async function runAnalysis(
   categoryThresholds?: Record<string, number>,
   confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
 ): Promise<AnalysisResult[]> {
-  const BATCH = 3
+  const BATCH = 5
   const results: AnalysisResult[] = []
   for (let i = 0; i < products.length; i += BATCH) {
     const batch = products.slice(i, i + BATCH)

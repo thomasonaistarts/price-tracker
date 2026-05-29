@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   }
 
   const startedAt = Date.now()
-  const BATCH = 3
+  const BATCH = 5
   const results: Awaited<ReturnType<typeof runAnalysis>> = []
   let skipped = 0
 
