@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import PlatformLogo from '@/components/ui/PlatformLogo'
+import { downloadExcel } from '@/lib/exportExcel'
 
 // ── Tipler ────────────────────────────────────────────────────────────────────
 
@@ -64,15 +65,43 @@ function weekLabel(weekStart: string) {
 
 // ── Ana bileşen ───────────────────────────────────────────────────────────────
 
+const ALERT_LABEL: Record<string, string> = {
+  above_market: 'Piyasa üstü',
+  below_market: 'Piyasa altı',
+  no_alert: 'Normal',
+  insufficient_data: 'Veri yetersiz',
+}
+
 export default function ReportsClient({ analyses, history }: Props) {
   const [tab, setTab] = useState<'summary' | 'category' | 'trend' | 'platform'>('summary')
 
   const valid = useMemo(() => analyses.filter(a => a.products != null), [analyses])
 
+  function handleExport() {
+    const rows = valid.map(a => ({
+      'SKU':           a.products!.sku,
+      'Ürün Adı':      a.products!.product_name,
+      'Marka':         a.products!.brand ?? '',
+      'Kategori':      a.products!.category ?? '',
+      'Bizim Fiyat':   a.products!.our_price,
+      'Piyasa Ort.':   a.market_mean ?? '',
+      'Min Fiyat':     a.min_price ?? '',
+      'Maks Fiyat':    a.max_price ?? '',
+      'Fark %':        a.price_diff_percent != null ? `${a.price_diff_percent > 0 ? '+' : ''}${a.price_diff_percent.toFixed(1)}%` : '',
+      'Durum':         ALERT_LABEL[a.alert] ?? a.alert,
+      'Uyarı Nedeni':  a.alert_reason ?? '',
+      'Kaynak Sayısı': a.sources_count,
+      'Analiz Tarihi': new Date(a.run_at).toLocaleString('tr-TR'),
+    }))
+    const date = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')
+    downloadExcel(rows, `fiyatlaa-rapor-${date}`, 'Rapor')
+  }
+
   return (
     <div>
-      {/* Tab navigasyon */}
-      <div className="overflow-x-auto pb-1 mb-5">
+      {/* Tab navigasyon + Excel butonu */}
+      <div className="flex items-center justify-between gap-4 mb-5">
+      <div className="overflow-x-auto pb-1 flex-1">
       <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 p-1 rounded-xl w-fit min-w-max">
         {([
           { key: 'summary',  label: '📊 Özet & Aksiyon' },
@@ -93,6 +122,16 @@ export default function ReportsClient({ analyses, history }: Props) {
           </button>
         ))}
       </div>
+      </div>
+      <button
+        onClick={handleExport}
+        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors whitespace-nowrap"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Excel indir
+      </button>
       </div>
 
       {tab === 'summary'  && <SummaryTab  rows={valid} />}

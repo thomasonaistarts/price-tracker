@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
+import { downloadExcel } from '@/lib/exportExcel'
 
 interface Source {
   site: string
@@ -225,6 +226,31 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
     }
   }
 
+  function handleExport() {
+    const alertLabel = (a: string) =>
+      a === 'above_market' ? 'Piyasa üstü' : a === 'below_market' ? 'Piyasa altı' : a === 'no_alert' ? 'Normal' : 'Veri yetersiz'
+
+    const rows = filtered.map(p => {
+      const an = latestMap.get(p.id)
+      return {
+        'SKU':            p.sku,
+        'Ürün Adı':       p.product_name,
+        'Marka':          p.brand ?? '',
+        'Kategori':       p.category ?? '',
+        'Bizim Fiyat':    p.our_price,
+        'Piyasa Ort.':    an?.market_mean ?? '',
+        'Min Fiyat':      an?.min_price ?? '',
+        'Maks Fiyat':     an?.max_price ?? '',
+        'Fark %':         an?.price_diff_percent != null ? `${an.price_diff_percent > 0 ? '+' : ''}${an.price_diff_percent.toFixed(1)}%` : '',
+        'Durum':          an ? alertLabel(an.alert) : '',
+        'Kaynak Sayısı':  an?.sources_count ?? '',
+        'Son Analiz':     an?.run_at ? new Date(an.run_at).toLocaleString('tr-TR') : '',
+      }
+    })
+    const date = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')
+    downloadExcel(rows, `fiyatlaa-urunler-${date}`, 'Ürünler')
+  }
+
   const inputCls = 'border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
   const selectCls = `px-2 py-1 ${inputCls}`
 
@@ -364,8 +390,17 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-          <div className="px-6 py-3 border-b border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-400">
-            {filtered.length} / {localProducts.length} ürün
+          <div className="px-6 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
+            <span className="text-xs text-gray-500 dark:text-slate-400">{filtered.length} / {localProducts.length} ürün</span>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Excel indir
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
