@@ -6,14 +6,14 @@ import type { ConfidenceThresholds } from '@/lib/scrapers'
 
 export const maxDuration = 300
 
-// Kaç ürünü aynı anda paralel işle
-const CONCURRENT = 3
-// Bir batch'in ortalama süresi (saniye) — 5 platform paralel scrapiyor
-const SECONDS_PER_BATCH = 25
+// Kaç ürünü aynı anda paralel işle (analyzer BATCH ile eşit)
+const CONCURRENT = 5
+// Bir batch'in ortalama süresi (saniye) — optimize edilmiş platform timeout'ları sonrası
+const SECONDS_PER_BATCH = 20
 // Timeout bitmeden kaç saniye önce dur
 const SAFETY_BUFFER_S = 20
-// Minimum yenileme aralığı (gün) — gerçek aralık ürün sayısına göre otomatik artar
-const MIN_REFRESH_DAYS = 7
+// Minimum yenileme aralığı (gün) — 250 ürün günlük kapasitede rahat sığıyor
+const MIN_REFRESH_DAYS = 1
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
