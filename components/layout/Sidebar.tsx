@@ -167,7 +167,7 @@ export default function Sidebar({ role, user, isOpen = false, onClose }: Sidebar
             </svg>
           </div>
           <div>
-            <div className="text-sm font-semibold text-white leading-tight">Fiyat İzleme</div>
+            <div className="text-sm font-semibold text-white leading-tight">Fiyatlaa</div>
             <div className="text-[10px] text-slate-500 leading-tight">Piyasa takip paneli</div>
           </div>
         </div>

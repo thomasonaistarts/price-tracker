@@ -36,18 +36,21 @@ export default function LoginPage() {
             </svg>
           </div>
           <div>
-            <p className="text-white font-semibold text-[15px] leading-none">Fiyat İzleme Sistemi</p>
+            <p className="text-white font-semibold text-[15px] leading-none">Fiyatlaa</p>
             <p className="text-slate-400 text-xs mt-0.5">Türkiye pazar analizi</p>
           </div>
         </div>
 
         {/* Başlık */}
         <div className="relative mt-14 mb-10">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-3">
+            fiyatlaa.com
+          </p>
           <h2 className="text-[2rem] font-bold text-white leading-tight tracking-tight">
-            Rakip fiyatları<br />otomatik takip edin
+            Rakiplerinizi her zaman<br />bir adım önünden görün
           </h2>
-          <p className="text-slate-400 text-sm mt-3 max-w-xs leading-relaxed">
-            Türkiye'nin önde gelen marketplace'lerinde ürün fiyatlarını anlık izleyin, sapmaları anında fark edin.
+          <p className="text-slate-400 text-sm mt-4 max-w-xs leading-relaxed">
+            Türkiye'nin büyük marketplace'lerini otomatik tarıyoruz. Fiyat sapması olduğu anda sizi haberdar ediyoruz.
           </p>
         </div>
 
@@ -175,7 +178,7 @@ export default function LoginPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <span className="font-bold text-gray-900 text-xl">Fiyat İzleme Sistemi</span>
+            <span className="font-bold text-gray-900 text-xl">Fiyatlaa</span>
           </div>
           <p className="text-gray-500 text-sm">Türkiye pazar fiyat analizi</p>
         </div>
@@ -184,8 +187,11 @@ export default function LoginPage() {
 
           {/* Form başlığı */}
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Hoş geldiniz</h2>
-            <p className="text-gray-400 text-sm mt-1">Hesabınıza giriş yapın</p>
+            <p className="text-blue-600 text-xs font-semibold uppercase tracking-widest mb-2">Fiyatlaa'ya hoş geldiniz</p>
+            <h2 className="text-2xl font-bold text-gray-900">Tekrar merhaba! 👋</h2>
+            <p className="text-gray-400 text-sm mt-1.5 leading-relaxed">
+              Rakipleriniz fiyat değiştirirken siz habersiz kalmayın.
+            </p>
           </div>
 
           <div className="space-y-5">
