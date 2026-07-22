@@ -9,7 +9,7 @@ const APIFY_TIMEOUT_S = 55  // soğuk actor başlangıçlarına tolerans
 
 export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
   const token = process.env.APIFY_TOKEN
-  if (!token) return []
+  if (!token) throw new Error('APIFY_TOKEN eksik')
 
   const searchUrl = `https://www.trendyol.com/sr?q=${encodeURIComponent(query)}`
 
@@ -33,7 +33,7 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
 
     if (!res.ok) {
       console.error('[Trendyol/Apify] HTTP', res.status)
-      return []
+      throw new Error('Apify HTTP ' + res.status)
     }
 
     const items: unknown[] = await res.json()
@@ -66,8 +66,8 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
         currency: 'TRY',
       }]
     })
-  } catch {
+  } catch (error) {
     console.error('[Trendyol/Apify] istek başarısız')
-    return []
+    throw error
   }
 }
