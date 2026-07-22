@@ -124,6 +124,54 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['source_match_decisions']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['source_match_decisions']['Insert']>
       }
+      data_archive_batches: {
+        Row: {
+          id: string
+          scope: 'site_catalog'
+          status: 'preparing' | 'verified' | 'failed'
+          reason: string | null
+          source_counts: Json
+          archive_counts: Json
+          created_by: string
+          created_at: string
+          verified_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['data_archive_batches']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['data_archive_batches']['Insert']>
+      }
+      data_archive_rows: {
+        Row: {
+          id: string
+          batch_id: string
+          source_table: string
+          source_id: string
+          owner_user_id: string | null
+          payload: Json
+          archived_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['data_archive_rows']['Row'], 'id' | 'archived_at'>
+        Update: never
+      }
+      integration_connections: {
+        Row: {
+          id: string
+          owner_user_id: string
+          provider: 'wolvox'
+          display_name: string
+          status: 'configuring' | 'disconnected' | 'connected' | 'error' | 'paused'
+          wolvox_version: string | null
+          company_code: string | null
+          working_year: number | null
+          bridge_installation_id: string | null
+          last_heartbeat_at: string | null
+          last_error: string | null
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['integration_connections']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['integration_connections']['Insert']>
+      }
       category_thresholds: {
         Row: {
           id: string

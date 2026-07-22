@@ -87,8 +87,9 @@ const navItems: NavItem[] = [
 ]
 
 const adminItems: NavItem[] = [
-  { href: '/admin/users',    label: 'Kullanıcılar',   icon: ic.users },
-  { href: '/admin/settings', label: 'Sistem ayarları', icon: ic.adminSettings },
+  { href: '/admin/users',        label: 'Kullanıcılar',   icon: ic.users },
+  { href: '/admin/settings',     label: 'Sistem ayarları', icon: ic.adminSettings },
+  { href: '/admin/integrations', label: 'Entegrasyonlar', icon: ic.adminSettings },
 ]
 
 function itemActive(pathname: string, item: NavItem) {
