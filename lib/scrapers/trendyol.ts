@@ -32,7 +32,7 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
     })
 
     if (!res.ok) {
-      console.error('[Trendyol/Apify] HTTP', res.status, await res.text().catch(() => ''))
+      console.error('[Trendyol/Apify] HTTP', res.status)
       return []
     }
 
@@ -66,8 +66,8 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
         currency: 'TRY',
       }]
     })
-  } catch (err) {
-    console.error('[Trendyol/Apify] error:', err)
+  } catch {
+    console.error('[Trendyol/Apify] istek başarısız')
     return []
   }
 }

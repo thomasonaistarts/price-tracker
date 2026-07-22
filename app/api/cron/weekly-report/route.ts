@@ -1,80 +1,121 @@
-import { NextRequest, NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
-import { createAdminClient } from '@/lib/supabase/server'
+import { validateCronRequest } from '@/lib/api-security'
 import { computeReportData, generateWeeklyEmailHtml } from '@/lib/email-report'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getUserSettings, updateUserSettings } from '@/lib/user-settings'
 
 export const maxDuration = 300
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+function getIstanbulSchedule() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Istanbul',
+    weekday: 'short',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const weekday = parts.find((part) => part.type === 'weekday')?.value ?? 'Mon'
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0)
+  const dayByName: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  }
+  return { day: dayByName[weekday] ?? 1, hour }
+}
 
 export async function GET(req: NextRequest) {
+  const authError = validateCronRequest(req)
+  if (authError) return authError
+
   if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 're_your_api_key_here') {
     return NextResponse.json({ error: 'RESEND_API_KEY yapılandırılmamış' }, { status: 503 })
   }
+
   const resend = new Resend(process.env.RESEND_API_KEY)
-  // Cron güvenlik kontrolü
-  const secret = process.env.CRON_SECRET
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const supabase = createAdminClient() as any
+  const { day, hour } = getIstanbulSchedule()
 
-  // Ürünü olan tüm kullanıcıları bul
   const { data: userRows } = await supabase
     .from('products')
-    .select('user_id')
+    .select('user_id, users!inner(is_active)')
     .eq('is_active', true)
+    .eq('users.is_active', true)
 
-  const userIds = Array.from(new Set((userRows ?? []).map((r: any) => r.user_id as string)))
-
+  const userIds: string[] = Array.from(
+    new Set<string>((userRows ?? []).map((row: any) => row.user_id as string)),
+  )
   if (userIds.length === 0) {
     return NextResponse.json({ sent: 0, message: 'Aktif ürün sahibi kullanıcı yok' })
   }
 
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const duplicateCutoff = Date.now() - 6 * 24 * 60 * 60 * 1000
   let sent = 0
   let failed = 0
-  const errors: string[] = []
+  let skipped = 0
 
   for (const userId of userIds) {
     try {
-      // Kullanıcı email adresini al
+      const settings = await getUserSettings(userId)
+      const lastSent = settings.weekly_report_last_sent_at
+        ? new Date(settings.weekly_report_last_sent_at).getTime()
+        : 0
+
+      if (
+        !settings.weekly_report_enabled
+        || settings.weekly_report_day !== day
+        || settings.weekly_report_hour !== hour
+        || lastSent > duplicateCutoff
+      ) {
+        skipped += 1
+        continue
+      }
+
       const { data: { user } } = await supabase.auth.admin.getUserById(userId)
-      if (!user?.email) continue
+      if (!user?.email) {
+        skipped += 1
+        continue
+      }
 
-      // Kullanıcının son analizleri (ürün başına en son)
-      const { data: rawAnalyses } = await supabase
-        .from('price_analyses')
-        .select(`
-          product_id, run_at, alert, alert_reason, price_diff_percent,
-          market_mean, min_price, sources_count, sources,
-          products(sku, product_name, our_price, brand, category)
-        `)
-        .eq('user_id', userId)
-        .order('run_at', { ascending: false })
-        .limit(5000)
+      const [{ data: rawAnalyses }, { data: history }] = await Promise.all([
+        supabase
+          .from('price_analyses')
+          .select(`
+            product_id, run_at, alert, alert_reason, price_diff_percent,
+            market_mean, min_price, sources_count, sources,
+            products(sku, product_name, our_price, brand, category)
+          `)
+          .eq('user_id', userId)
+          .order('run_at', { ascending: false })
+          .limit(5000),
+        supabase
+          .from('price_analyses')
+          .select('run_at, alert, product_id')
+          .eq('user_id', userId)
+          .gte('run_at', since)
+          .order('run_at', { ascending: false })
+          .limit(10000),
+      ])
 
-      if (!rawAnalyses?.length) continue
+      if (!rawAnalyses?.length) {
+        skipped += 1
+        continue
+      }
 
-      // Trend verisi (son 90 gün)
-      const { data: history } = await supabase
-        .from('price_analyses')
-        .select('run_at, alert, product_id')
-        .eq('user_id', userId)
-        .gte('run_at', since)
-        .order('run_at', { ascending: false })
-        .limit(10000)
+      const reportData = computeReportData(rawAnalyses, history ?? [], user.email)
+      if (reportData.summary.total === 0) {
+        skipped += 1
+        continue
+      }
 
-      // Rapor verisi hesapla
-      const reportData = computeReportData(
-        rawAnalyses ?? [],
-        history ?? [],
-        user.email,
-      )
-
-      // Analiz edilmiş ürün yoksa e-posta gönderme
-      if (reportData.summary.total === 0) continue
-
-      // E-posta gönder
       const { error } = await resend.emails.send({
         from: process.env.RESEND_FROM ?? 'Fiyat Takip <onboarding@resend.dev>',
         to: user.email,
@@ -83,21 +124,22 @@ export async function GET(req: NextRequest) {
       })
 
       if (error) {
-        errors.push(`${user.email}: ${error.message}`)
-        failed++
-      } else {
-        sent++
+        failed += 1
+        continue
       }
-    } catch (err: any) {
-      errors.push(`userId ${userId}: ${err?.message ?? 'Bilinmeyen hata'}`)
-      failed++
+
+      await updateUserSettings(userId, { weekly_report_last_sent_at: new Date().toISOString() })
+      sent += 1
+    } catch {
+      failed += 1
     }
   }
 
   return NextResponse.json({
     sent,
     failed,
-    total_users: userIds.length,
-    errors: errors.length > 0 ? errors : undefined,
+    skipped,
+    eligible_users: userIds.length,
+    schedule_timezone: 'Europe/Istanbul',
   })
 }

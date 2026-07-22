@@ -53,7 +53,7 @@ export default function LoginPage() {
             Rakiplerinizi her zaman<br />bir adım önünden görün
           </h2>
           <p className="text-slate-400 text-sm mt-4 max-w-xs leading-relaxed">
-            Türkiye'nin büyük marketplace'lerini otomatik tarıyoruz. Fiyat sapması olduğu anda sizi haberdar ediyoruz.
+            Türkiye&apos;nin büyük marketplace&apos;lerini otomatik tarıyoruz. Fiyat sapması olduğu anda sizi haberdar ediyoruz.
           </p>
         </div>
 
@@ -191,7 +191,7 @@ export default function LoginPage() {
 
           {/* Form başlığı */}
           <div className="mb-8">
-            <p className="text-blue-600 text-xs font-semibold uppercase tracking-widest mb-2">Fiyatlaa'ya hoş geldiniz</p>
+            <p className="text-blue-600 text-xs font-semibold uppercase tracking-widest mb-2">Fiyatlaa&apos;ya hoş geldiniz</p>
             <h2 className="text-2xl font-bold text-gray-900">Tekrar merhaba! 👋</h2>
             <p className="text-gray-400 text-sm mt-1.5 leading-relaxed">
               Rakipleriniz fiyat değiştirirken siz habersiz kalmayın.

@@ -1,26 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
+import { z } from 'zod'
+
+const adminUserPatchSchema = z.object({
+  password: z.string().min(8, 'Şifre en az 8 karakter olmalı').optional(),
+  is_active: z.boolean().optional(),
+  role: z.enum(['admin', 'user']).optional(),
+}).strict()
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  let currentAdminId: string
   try {
-    await requireAdmin()
+    currentAdminId = (await requireAdmin()).authUser.id
   } catch {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
   }
 
-  const body = await req.json()
+  const parsed = adminUserPatchSchema.safeParse(await req.json())
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+  }
+  const body = parsed.data
   const { id } = params
+  if (id === currentAdminId && (body.is_active === false || body.role === 'user')) {
+    return NextResponse.json({ error: 'Kendi yönetici hesabınızı pasifleştiremez veya düşüremezsiniz' }, { status: 400 })
+  }
   const supabase = createAdminClient() as any
 
   // Şifre değiştirme
   if (body.password !== undefined) {
-    if (!body.password || body.password.length < 8) {
-      return NextResponse.json({ error: 'Şifre en az 8 karakter olmalı' }, { status: 400 })
-    }
     const { error } = await supabase.auth.admin.updateUserById(id, {
       password: body.password,
     })

@@ -41,6 +41,7 @@ create table public.products (
   our_price     numeric(12, 2) not null,
   currency      text not null default 'TRY',
   is_active     boolean not null default true,
+  last_analyzed_at timestamptz,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   unique(user_id, sku)
@@ -64,6 +65,7 @@ create table public.price_analyses (
   alert_reason        text,
   sources_count       integer not null default 0,
   sources             jsonb not null default '[]',
+  scraper_health      jsonb not null default '[]',
   confidence          numeric(4, 2),
   threshold_used      numeric(5, 2) not null default 10,
   notes               text[] not null default '{}',
@@ -120,7 +122,7 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'user')
+    'user'
   );
   return new;
 end;
@@ -145,6 +147,24 @@ $$ language plpgsql security definer;
 -- Row Level Security (RLS)
 -- -----------------------------------------------
 
+-- RLS politikalarında users tablosuna doğrudan geri dönmek sonsuz özyineleme
+-- üretebilir. Yönetici kontrolünü security definer yardımcı fonksiyonuyla yap.
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.users
+    where id = auth.uid() and role = 'admin' and is_active = true
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
 alter table public.users enable row level security;
 alter table public.products enable row level security;
 alter table public.price_analyses enable row level security;
@@ -153,17 +173,14 @@ alter table public.category_thresholds enable row level security;
 -- users: admin herkesi görür, user sadece kendini
 create policy "users_select" on public.users for select using (
   auth.uid() = id
-  or exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+  or public.is_admin()
 );
-create policy "users_update_self" on public.users for update using (auth.uid() = id);
-create policy "users_admin_all" on public.users for all using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "users_admin_all" on public.users for all using (public.is_admin());
 
 -- products: kullanıcı kendi ürünlerini görür; admin hepsini
 create policy "products_select" on public.products for select using (
   user_id = auth.uid()
-  or exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+  or public.is_admin()
 );
 create policy "products_insert" on public.products for insert with check (user_id = auth.uid());
 create policy "products_update" on public.products for update using (user_id = auth.uid());
@@ -172,7 +189,7 @@ create policy "products_delete" on public.products for delete using (user_id = a
 -- price_analyses: kullanıcı kendi analizlerini görür; admin hepsini
 create policy "analyses_select" on public.price_analyses for select using (
   user_id = auth.uid()
-  or exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+  or public.is_admin()
 );
 create policy "analyses_insert" on public.price_analyses for insert with check (user_id = auth.uid());
 
@@ -184,6 +201,7 @@ create policy "thresholds_all" on public.category_thresholds for all using (user
 -- -----------------------------------------------
 create index idx_products_user_id on public.products(user_id);
 create index idx_products_sku on public.products(user_id, sku);
+create index idx_products_refresh_queue on public.products(is_active, last_analyzed_at);
 create index idx_analyses_product_id on public.price_analyses(product_id);
 create index idx_analyses_user_id on public.price_analyses(user_id);
 create index idx_analyses_run_at on public.price_analyses(run_at desc);
@@ -206,7 +224,7 @@ create trigger trg_user_settings_updated_at
 
 alter table public.user_settings enable row level security;
 create policy "user_settings_own" on public.user_settings
-  for all using (user_id = auth.uid());
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- -----------------------------------------------
 -- İlk admin kullanıcı oluşturma

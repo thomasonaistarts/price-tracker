@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { z } from 'zod'
 
 const thresholdSchema = z.object({
@@ -9,16 +9,11 @@ const thresholdSchema = z.object({
 })
 
 async function getAdminUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const adminSupabase = createAdminClient() as any
-  const { data: profile } = await adminSupabase
-    .from('users').select('role').eq('id', user.id).single()
-
-  if (profile?.role !== 'admin') return null
-  return user
+  try {
+    return (await requireAdmin()).authUser
+  } catch {
+    return null
+  }
 }
 
 export async function GET() {

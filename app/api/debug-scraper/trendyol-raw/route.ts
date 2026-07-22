@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateDebugRequest } from '@/lib/api-security'
 
 const ACTOR_ID = 'fatihtahta~trendyol-scraper'
 
 export async function GET(req: NextRequest) {
+  const authError = await validateDebugRequest()
+  if (authError) return authError
+
   const query = req.nextUrl.searchParams.get('q') ?? 'BIC Velleda Tahta Kalemi Siyah'
   const token = process.env.APIFY_TOKEN
   if (!token) return NextResponse.json({ error: 'APIFY_TOKEN eksik' }, { status: 500 })

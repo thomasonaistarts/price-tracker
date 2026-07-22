@@ -44,7 +44,13 @@ SCRAPERAPI_KEY=...
 
 # Apify — https://console.apify.com/account/integrations
 APIFY_TOKEN=...
+
+# Vercel cron uçlarını koruyan güçlü ve rastgele anahtar
+CRON_SECRET=...
 ```
+
+Mevcut bir Supabase veritabanını güncelliyorsanız, ana kurulum dosyası yerine
+`supabase-sprint1-migration.sql` dosyasını SQL Editor üzerinden bir kez çalıştırın.
 
 ### 3b. Resend (Haftalık e-posta raporu) — sonradan yapılacak
 
@@ -60,8 +66,8 @@ RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
 RESEND_FROM=Fiyat Takip <noreply@siteniniz.com>
 ```
 
-> E-posta her Pazartesi 08:00 (Türkiye saati) otomatik gönderilir.  
-> Manuel test için: `GET /api/cron/weekly-report`
+> Rapor, kullanıcının ayarladığı gün ve saatte (Türkiye saati) otomatik gönderilir.
+> Cron uçları `Authorization: Bearer <CRON_SECRET>` olmadan çalışmaz.
 
 ### 4. İlk admin kullanıcıyı oluştur
 

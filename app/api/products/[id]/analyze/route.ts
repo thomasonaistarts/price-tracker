@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { analyzeProduct } from '@/lib/analyzer'
+import { getUserSettings } from '@/lib/user-settings'
 
 export const maxDuration = 300
 
@@ -25,10 +26,45 @@ export async function POST(
 
   if (error || !product) return NextResponse.json({ error: 'Ürün bulunamadı' }, { status: 404 })
 
-  const result = await analyzeProduct(product, 10, 2)
+  const cooldownMs = 10 * 60 * 1000
+  if (product.last_analyzed_at) {
+    const elapsed = Date.now() - new Date(product.last_analyzed_at).getTime()
+    if (elapsed >= 0 && elapsed < cooldownMs) {
+      const retryAfterSeconds = Math.ceil((cooldownMs - elapsed) / 1000)
+      return NextResponse.json(
+        { error: 'Bu ürün kısa süre önce analiz edildi', retry_after_seconds: retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+      )
+    }
+  }
+
+  const settings = await getUserSettings(userId)
+  const { data: thresholds } = await supabase
+    .from('category_thresholds')
+    .select('category, threshold_percent')
+    .eq('user_id', userId)
+
+  const categoryThresholds = Object.fromEntries(
+    (thresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
+  )
+
+  const result = await analyzeProduct(product, {
+    thresholdPercent: settings.default_threshold_percent,
+    minSources: settings.min_sources,
+    categoryThresholds,
+    confidenceThresholds: {
+      exact: settings.confidence_exact / 100,
+      high: settings.confidence_high / 100,
+      medium: settings.confidence_medium / 100,
+      low: settings.confidence_low / 100,
+    },
+    upperOutlierPct: settings.outlier_upper_pct,
+    lowerOutlierPct: settings.outlier_filter_pct,
+    activePlatforms: settings.active_platforms,
+  })
   const now = new Date().toISOString()
 
-  await supabase.from('price_analyses').insert({
+  const { error: insertError } = await supabase.from('price_analyses').insert({
     product_id: product.id,
     user_id: userId,
     run_at: now,
@@ -46,9 +82,19 @@ export async function POST(
     threshold_used: result.threshold_used,
     notes: result.notes,
     follow_up: result.follow_up,
+    scraper_health: result.scraper_health,
   })
+  if (insertError) {
+    return NextResponse.json({ error: 'Analiz sonucu kaydedilemedi' }, { status: 500 })
+  }
 
-  await supabase.from('products').update({ last_analyzed_at: now }).eq('id', product.id)
+  const { error: updateError } = await supabase
+    .from('products')
+    .update({ last_analyzed_at: now })
+    .eq('id', product.id)
+  if (updateError) {
+    return NextResponse.json({ error: 'Analiz zamanı güncellenemedi' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true, alert: result.alert, price_diff_percent: result.price_diff_percent })
 }

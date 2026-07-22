@@ -55,6 +55,7 @@ export interface Database {
           alert_reason: string | null
           sources_count: number
           sources: Json
+          scraper_health: Json
           confidence: number
           threshold_used: number
           notes: string[]
@@ -109,6 +110,7 @@ export interface UserSettings {
   weekly_report_enabled: boolean       // default: true
   weekly_report_day: number            // 0=Paz … 6=Cmt, default: 1 (Pzt)
   weekly_report_hour: number           // 0-23, default: 8
+  weekly_report_last_sent_at?: string  // cron tarafından tekrar gönderimi önlemek için tutulur
 
   // Eşleşme hassasiyeti (0-100 tam sayı → score = değer / 100)
   confidence_exact: number             // default: 95  → ⭐ Tam eşleşme

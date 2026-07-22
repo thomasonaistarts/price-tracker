@@ -8,37 +8,92 @@ import type { ScrapedPrice } from './types'
 
 export type { ScrapedPrice }
 
+export const SUPPORTED_PLATFORMS = ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol'] as const
+export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
+
+export interface ScrapeOptions {
+  thresholds?: ConfidenceThresholds
+  activePlatforms?: string[]
+  lowerOutlierPct?: number
+  onHealth?: (health: PlatformScrapeHealth[]) => void
+}
+
+export interface PlatformScrapeHealth {
+  platform: SupportedPlatform
+  status: 'success' | 'empty' | 'timeout' | 'error'
+  resultCount: number
+  durationMs: number
+}
+
 // Platform başına timeout — render gerektiren Hepsiburada daha uzun
 const TIMEOUT = {
-  hepsiburada: 30_000,  // render=true ~25-30s
+  hepsiburada: 40_000,  // 7s iç API denemesi + gerekirse render
   n11:         12_000,
   pttavm:      12_000,
   idefix:      12_000,
   trendyol:    35_000,  // Apify run-sync ~15-35s
 }
 
-function withTimeout<T>(promise: Promise<T>, fallback: T, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms)),
-  ])
+class ScraperTimeoutError extends Error {}
+
+async function runScraper(
+  platform: SupportedPlatform,
+  scraper: () => Promise<ScrapedPrice[]>,
+  timeoutMs: number,
+): Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }> {
+  const startedAt = Date.now()
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    const items = await Promise.race([
+      scraper(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ScraperTimeoutError()), timeoutMs)
+      }),
+    ])
+    return {
+      items,
+      health: {
+        platform,
+        status: items.length > 0 ? 'success' : 'empty',
+        resultCount: items.length,
+        durationMs: Date.now() - startedAt,
+      },
+    }
+  } catch (error) {
+    return {
+      items: [],
+      health: {
+        platform,
+        status: error instanceof ScraperTimeoutError ? 'timeout' : 'error',
+        resultCount: 0,
+        durationMs: Date.now() - startedAt,
+      },
+    }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 export { type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS }
 
 export async function scrapeAllPlatforms(
   query: string,
-  thresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+  options: ScrapeOptions = {},
 ): Promise<ScrapedPrice[]> {
-  const [hepsiburada, n11, pttavm, idefix, trendyol] = await Promise.all([
-    withTimeout(scrapeHepsiburada(query), [], TIMEOUT.hepsiburada),
-    withTimeout(scrapeN11(query),         [], TIMEOUT.n11),
-    withTimeout(scrapePttavm(query),      [], TIMEOUT.pttavm),
-    withTimeout(scrapeIdefix(query),      [], TIMEOUT.idefix),
-    withTimeout(scrapeTrendyol(query),    [], TIMEOUT.trendyol),
-  ])
+  const thresholds = options.thresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS
+  const active = new Set(options.activePlatforms ?? SUPPORTED_PLATFORMS)
+  const jobs: Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }>[] = []
+  if (active.has('Hepsiburada')) jobs.push(runScraper('Hepsiburada', () => scrapeHepsiburada(query), TIMEOUT.hepsiburada))
+  if (active.has('N11')) jobs.push(runScraper('N11', () => scrapeN11(query), TIMEOUT.n11))
+  if (active.has('PTTAvm')) jobs.push(runScraper('PTTAvm', () => scrapePttavm(query), TIMEOUT.pttavm))
+  if (active.has('İdefix')) jobs.push(runScraper('İdefix', () => scrapeIdefix(query), TIMEOUT.idefix))
+  if (active.has('Trendyol')) jobs.push(runScraper('Trendyol', () => scrapeTrendyol(query), TIMEOUT.trendyol))
 
-  const all = [...hepsiburada, ...n11, ...pttavm, ...idefix, ...trendyol]
+  const platformResults = await Promise.all(jobs)
+  options.onHealth?.(platformResults.map((result) => result.health))
+
+  const all = platformResults.flatMap((result) => result.items)
 
   const results: ScrapedPrice[] = []
 
@@ -69,6 +124,7 @@ export async function scrapeAllPlatforms(
         const { unitPrice, label } = calcUnitPrice(item.price, mr.candidateBaseQty, mr.unitType as 'weight' | 'volume' | 'count' | 'length')
         enriched.unitPrice = unitPrice
         enriched.unitPriceLabel = label
+        enriched.comparisonPrice = Math.round((item.price / mr.quantityRatio) * 100) / 100
       }
     }
 
@@ -79,7 +135,7 @@ export async function scrapeAllPlatforms(
   const deduped = cheapestPerSiteAndConfidence(results)
 
   // Piyasa medyanının %50'sinin altındaki fiyatları at (yanlış ürün eşleşmesi temizliği)
-  return filterPriceOutliers(deduped)
+  return filterPriceOutliers(deduped, options.lowerOutlierPct ?? 50)
 }
 
 /**
@@ -87,12 +143,12 @@ export async function scrapeAllPlatforms(
  * Örnek: medyan ₺12.000 ise → ₺6.000 altı fiyatlar atılır.
  * Çok az sonuç varsa (<3) filtreleme uygulanmaz.
  */
-function filterPriceOutliers(items: ScrapedPrice[]): ScrapedPrice[] {
+function filterPriceOutliers(items: ScrapedPrice[], lowerOutlierPct: number): ScrapedPrice[] {
   if (items.length < 3) return items
-  const sorted = [...items].map(i => i.price).sort((a, b) => a - b)
+  const sorted = [...items].map(i => i.comparisonPrice ?? i.price).sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)]
-  const floor = median * 0.5
-  return items.filter(i => i.price >= floor)
+  const floor = median * Math.min(100, Math.max(1, lowerOutlierPct)) / 100
+  return items.filter(i => (i.comparisonPrice ?? i.price) >= floor)
 }
 
 /**

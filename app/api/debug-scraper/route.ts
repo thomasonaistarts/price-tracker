@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { proxiedUrl } from '@/lib/scrapers/proxy'
+import { validateDebugRequest } from '@/lib/api-security'
 
 export async function GET(req: NextRequest) {
+  const authError = await validateDebugRequest()
+  if (authError) return authError
+
   const query = req.nextUrl.searchParams.get('q') ?? 'Sony Kulaklık'
   const site  = req.nextUrl.searchParams.get('site') ?? 'trendyol'
   const render = req.nextUrl.searchParams.get('render') === 'true'

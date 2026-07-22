@@ -169,7 +169,7 @@ export default function AnalyzePage() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products, threshold_percent: threshold, min_sources: 2 }),
+        body: JSON.stringify({ products, threshold_percent: threshold }),
       })
 
       // Vercel timeout / 5xx durumunda plain-text HTML dönebilir — JSON değilse kullanıcı dostu mesaj göster
@@ -344,7 +344,7 @@ export default function AnalyzePage() {
         <div className="mb-6">
           <h1 className="text-xl font-medium text-gray-900 dark:text-slate-100">Fiyat analizi</h1>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">
-            Hepsiburada, N11, PTTAvm, İdefix ve Trendyol'daki rakip fiyatları otomatik tarar
+            Hepsiburada, N11, PTTAvm, İdefix ve Trendyol&apos;daki rakip fiyatları otomatik tarar
           </p>
         </div>
 

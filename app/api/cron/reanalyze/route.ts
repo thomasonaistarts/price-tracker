@@ -1,144 +1,156 @@
-import { NextRequest, NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { analyzeProduct, type AnalysisOptions } from '@/lib/analyzer'
+import { validateCronRequest } from '@/lib/api-security'
 import { createAdminClient } from '@/lib/supabase/server'
-import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
-import type { ConfidenceThresholds } from '@/lib/scrapers'
 
 export const maxDuration = 300
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-// Kaç ürünü aynı anda paralel işle (analyzer BATCH ile eşit)
+const REFRESH_DAYS = 7
+const HOURLY_TARGET = 20
 const CONCURRENT = 5
-// Bir batch'in ortalama süresi (saniye) — optimize edilmiş platform timeout'ları sonrası
-const SECONDS_PER_BATCH = 20
-// Timeout bitmeden kaç saniye önce dur
-const SAFETY_BUFFER_S = 20
-// Minimum yenileme aralığı (gün) — 250 ürün günlük kapasitede rahat sığıyor
-const MIN_REFRESH_DAYS = 1
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = validateCronRequest(req)
+  if (authError) return authError
 
   const startedAt = Date.now()
-  const budgetMs = (maxDuration - SAFETY_BUFFER_S) * 1000
-
+  const cutoff = new Date(
+    Date.now() - REFRESH_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString()
   const supabase = createAdminClient() as any
 
-  // Toplam aktif ürün sayısına göre döngü süresi hesapla
-  // Günlük kapasite: 12 çalışma × CONCURRENT × (280s / SECONDS_PER_BATCH) ürün
-  const dailyCapacity = 12 * CONCURRENT * Math.floor((maxDuration - SAFETY_BUFFER_S) / SECONDS_PER_BATCH)
-  const { count: totalActive } = await supabase
-    .from('products')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true)
-  const cycleDays = Math.ceil((totalActive ?? 0) / dailyCapacity)
-  const refreshDays = Math.max(MIN_REFRESH_DAYS, cycleDays + 1) // döngü + 1 gün tampon
+  const [{ count: totalActive }, { data: products, error: productsError }] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true),
+    supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .or(`last_analyzed_at.is.null,last_analyzed_at.lt.${cutoff}`)
+      .order('last_analyzed_at', { ascending: true, nullsFirst: true })
+      .limit(HOURLY_TARGET),
+  ])
 
-  const cutoff = new Date(Date.now() - refreshDays * 24 * 60 * 60 * 1000).toISOString()
-
-  // refreshDays içinde analiz edilmemiş aktif ürünler, en eskisi önce
-  const { data: products } = await supabase
-    .from('products')
-    .select('*')
-    .eq('is_active', true)
-    .or(`last_analyzed_at.is.null,last_analyzed_at.lt.${cutoff}`)
-    .order('last_analyzed_at', { ascending: true, nullsFirst: true })
-
-  if (!products?.length) {
-    return NextResponse.json({ processed: 0, skipped: 0, message: 'Tüm ürünler güncel' })
+  if (productsError) {
+    return NextResponse.json({ error: 'Ürün kuyruğu okunamadı' }, { status: 500 })
   }
 
-  // Her kullanıcının eşleşme hassasiyeti ayarlarını önceden çek (cache)
-  const uniqueUserIds: string[] = Array.from(new Set(products.map((p: any) => p.user_id as string)))
-  const userConfidenceMap = new Map<string, ConfidenceThresholds>()
-  const userUpperOutlierMap = new Map<string, number>()
-  await Promise.all(
-    uniqueUserIds.map(async (uid: string) => {
-      const s = await getUserSettings(uid)
-      userConfidenceMap.set(uid, {
-        exact:  s.confidence_exact  / 100,
-        high:   s.confidence_high   / 100,
-        medium: s.confidence_medium / 100,
-        low:    s.confidence_low    / 100,
-      })
-      userUpperOutlierMap.set(uid, s.outlier_upper_pct ?? 250)
+  if (!products?.length) {
+    return NextResponse.json({
+      processed: 0,
+      failed: 0,
+      message: '7 günlük süresi dolmuş ürün yok',
     })
+  }
+
+  const userIds: string[] = Array.from(
+    new Set<string>(products.map((product: any) => product.user_id as string)),
   )
+  const optionsByUser = new Map<string, AnalysisOptions>()
+
+  await Promise.all(userIds.map(async (userId) => {
+    const [settings, { data: thresholds }] = await Promise.all([
+      getUserSettings(userId),
+      supabase
+        .from('category_thresholds')
+        .select('category, threshold_percent')
+        .eq('user_id', userId),
+    ])
+
+    optionsByUser.set(userId, {
+      thresholdPercent: settings.default_threshold_percent,
+      minSources: settings.min_sources,
+      categoryThresholds: Object.fromEntries(
+        (thresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
+      ),
+      confidenceThresholds: {
+        exact: settings.confidence_exact / 100,
+        high: settings.confidence_high / 100,
+        medium: settings.confidence_medium / 100,
+        low: settings.confidence_low / 100,
+      },
+      upperOutlierPct: settings.outlier_upper_pct,
+      lowerOutlierPct: settings.outlier_filter_pct,
+      activePlatforms: settings.active_platforms,
+    })
+  }))
 
   let processed = 0
   let failed = 0
-  let skipped = 0
 
-  // 3'lü paralel batch'ler halinde işle
-  for (let i = 0; i < products.length; i += CONCURRENT) {
-    const elapsed = Date.now() - startedAt
-    if (elapsed + SECONDS_PER_BATCH * 1000 > budgetMs) {
-      skipped = products.length - i
-      break
-    }
+  for (let index = 0; index < products.length; index += CONCURRENT) {
+    const batch = products.slice(index, index + CONCURRENT)
+    const results = await Promise.allSettled(batch.map((product: any) => {
+      const options = optionsByUser.get(product.user_id)
+      if (!options) throw new Error('Kullanıcı ayarları yüklenemedi')
+      return analyzeProduct(product, options)
+    }))
 
-    const batch = products.slice(i, i + CONCURRENT)
+    await Promise.all(results.map(async (settled, resultIndex) => {
+      if (settled.status === 'rejected') {
+        failed += 1
+        return
+      }
 
-    const results = await Promise.allSettled(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      batch.map((product: any) => {
-        const confThr = userConfidenceMap.get(product.user_id)
-        const upperPct = userUpperOutlierMap.get(product.user_id) ?? 250
-        return analyzeProduct(product, 10, 2, confThr, upperPct)
+      const product = batch[resultIndex]
+      const result = settled.value
+      const analyzedAt = new Date().toISOString()
+      const { error: insertError } = await supabase.from('price_analyses').insert({
+        product_id: product.id,
+        user_id: product.user_id,
+        run_at: analyzedAt,
+        market_mean: result.market_mean,
+        market_median: result.market_median,
+        market_std: result.market_std,
+        min_price: result.min_price,
+        max_price: result.max_price,
+        price_diff_percent: result.price_diff_percent,
+        alert: result.alert,
+        alert_reason: result.alert_reason,
+        sources_count: result.sources_count,
+        sources: result.sources,
+        confidence: result.confidence,
+        threshold_used: result.threshold_used,
+        notes: result.notes,
+        follow_up: result.follow_up,
+        scraper_health: result.scraper_health,
       })
-    )
 
-    const now = new Date().toISOString()
+      if (insertError) {
+        failed += 1
+        return
+      }
 
-    await Promise.allSettled(
-      results.map(async (res, idx) => {
-        const product = batch[idx]
-        if (res.status === 'rejected') { failed++; return }
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ last_analyzed_at: analyzedAt })
+        .eq('id', product.id)
 
-        const result = res.value
-        await supabase.from('price_analyses').insert({
-          product_id: product.id,
-          user_id: product.user_id,
-          run_at: now,
-          market_mean: result.market_mean,
-          market_median: result.market_median,
-          market_std: result.market_std,
-          min_price: result.min_price,
-          max_price: result.max_price,
-          price_diff_percent: result.price_diff_percent,
-          alert: result.alert,
-          alert_reason: result.alert_reason,
-          sources_count: result.sources_count,
-          sources: result.sources,
-          confidence: result.confidence,
-          threshold_used: result.threshold_used,
-          notes: result.notes,
-          follow_up: result.follow_up,
-        })
-        await supabase.from('products').update({ last_analyzed_at: now }).eq('id', product.id)
-        processed++
-      })
-    )
+      if (updateError) {
+        failed += 1
+        return
+      }
+
+      processed += 1
+    }))
   }
-
-  const elapsed_s = Math.round((Date.now() - startedAt) / 1000)
-  const remaining = products.length - processed - failed
 
   return NextResponse.json({
     processed,
     failed,
-    skipped,
-    total_pending: products.length,
-    total_active: totalActive,
-    daily_capacity: dailyCapacity,
-    cycle_days: cycleDays,
-    refresh_days: refreshDays,
-    elapsed_s,
-    next_run_in: '2 saat',
-    message: skipped > 0
-      ? `${remaining} ürün kalan — sonraki çalışmada devam edilecek`
-      : `Tüm bekleyen ${processed} ürün güncellendi`,
+    selected: products.length,
+    total_active: totalActive ?? 0,
+    hourly_target: HOURLY_TARGET,
+    daily_capacity: HOURLY_TARGET * 24,
+    seven_day_capacity: HOURLY_TARGET * 24 * REFRESH_DAYS,
+    refresh_days: REFRESH_DAYS,
+    elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
+    next_run_in: '1 saat',
   })
 }

@@ -4,8 +4,12 @@ import { scrapeHepsiburada } from '@/lib/scrapers/hepsiburada'
 import { scrapePttavm } from '@/lib/scrapers/pttavm'
 import { scrapeIdefix } from '@/lib/scrapers/idefix'
 import { scrapeTrendyol } from '@/lib/scrapers/trendyol'
+import { validateDebugRequest } from '@/lib/api-security'
 
 export async function GET(req: NextRequest) {
+  const authError = await validateDebugRequest()
+  if (authError) return authError
+
   const query = req.nextUrl.searchParams.get('q') ?? 'Sony WH-1000XM5 Kulaklık'
   const site = req.nextUrl.searchParams.get('site') ?? 'n11'
 

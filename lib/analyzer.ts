@@ -1,5 +1,5 @@
 import type { ProductInput } from '@/lib/validations'
-import { scrapeAllPlatforms, type ScrapedPrice, type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS } from '@/lib/scrapers'
+import { scrapeAllPlatforms, type ScrapedPrice, type ConfidenceThresholds, type PlatformScrapeHealth, DEFAULT_CONFIDENCE_THRESHOLDS } from '@/lib/scrapers'
 
 export type { ScrapedPrice }
 
@@ -23,6 +23,17 @@ export interface AnalysisResult {
   follow_up: string[]
   confidence: number
   notes: string[]
+  scraper_health: PlatformScrapeHealth[]
+}
+
+export interface AnalysisOptions {
+  thresholdPercent: number
+  minSources: number
+  categoryThresholds?: Record<string, number>
+  confidenceThresholds?: ConfidenceThresholds
+  upperOutlierPct?: number
+  lowerOutlierPct?: number
+  activePlatforms?: string[]
 }
 
 function r2(n: number) { return Math.round(n * 100) / 100 }
@@ -38,17 +49,23 @@ function iqrFilter(arr: number[]): number[] {
 
 export async function analyzeProduct(
   product: ProductInput,
-  thresholdPercent: number,
-  minSources: number,
-  confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
-  upperOutlierPct = 250,
+  options: AnalysisOptions,
 ): Promise<AnalysisResult> {
   const { sku, product_name, category = '', brand = '', our_price } = product
+  const thresholdPercent = options.categoryThresholds?.[category] ?? options.thresholdPercent
+  const minSources = options.minSources
+  const upperOutlierPct = options.upperOutlierPct ?? 250
 
   // Gerçek rakip fiyatları scrape et
-  const sources = await scrapeAllPlatforms(product_name, confidenceThresholds)
+  let scraperHealth: PlatformScrapeHealth[] = []
+  const sources = await scrapeAllPlatforms(product_name, {
+    thresholds: options.confidenceThresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS,
+    activePlatforms: options.activePlatforms,
+    lowerOutlierPct: options.lowerOutlierPct,
+    onHealth: (health) => { scraperHealth = health },
+  })
 
-  const prices = sources.map(s => s.price).filter(p => p > 0)
+  const prices = sources.map(s => s.comparisonPrice ?? s.price).filter(p => p > 0)
   const filtered = iqrFilter(prices)
 
   if (filtered.length < minSources) {
@@ -66,6 +83,7 @@ export async function analyzeProduct(
         : `Yalnızca ${filtered.length} güvenilir kaynak bulundu (min: ${minSources})`,
       follow_up: ['manuel_kontrol', 'daha_fazla_kaynak'],
       confidence: 0.2,
+      scraper_health: scraperHealth,
       notes: sources.length === 0
         ? ['Scraper sonuç döndürmedi — ürün adını kontrol edin veya daha sonra tekrar deneyin']
         : [`IQR filtreleme sonrası ${filtered.length} kaynak kaldı`],
@@ -92,9 +110,10 @@ export async function analyzeProduct(
       alert_reason: `Fiyat farkı %${diff.toFixed(0)} (eşik: %${upperOutlierPct}) — muhtemelen yanlış ürün eşleşmesi`,
       follow_up: ['manuel_kontrol', 'ürün_adını_güncelle'],
       confidence: 0.1,
+      scraper_health: scraperHealth,
       notes: [
         `Bizim fiyatımız (₺${our_price}) piyasa ortalamasının (₺${mean}) %${diff.toFixed(0)} üzerinde.`,
-        'Bu oran %250 eşiğini aştığı için sonuçlar güvenilir sayılmıyor — eşleşen ürünler farklı olabilir.',
+        `Bu oran %${upperOutlierPct} eşiğini aştığı için sonuçlar güvenilir sayılmıyor — eşleşen ürünler farklı olabilir.`,
       ],
     }
   }
@@ -126,27 +145,23 @@ export async function analyzeProduct(
     price_diff_percent: diff,
     alert, alert_reason, follow_up,
     confidence,
-    notes: [`${sources.length} fiyat kaynağı tarandı (Hepsiburada, N11, PTTAvm, İdefix, Trendyol)`],
+    scraper_health: scraperHealth,
+    notes: [
+      `${sources.length} fiyat kaynağı bulundu (${(options.activePlatforms ?? ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol']).join(', ')})`,
+    ],
   }
 }
 
 export async function runAnalysis(
   products: ProductInput[],
-  thresholdPercent: number,
-  minSources: number,
-  categoryThresholds?: Record<string, number>,
-  confidenceThresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
-  upperOutlierPct = 250,
+  options: AnalysisOptions,
 ): Promise<AnalysisResult[]> {
   const BATCH = 5
   const results: AnalysisResult[] = []
   for (let i = 0; i < products.length; i += BATCH) {
     const batch = products.slice(i, i + BATCH)
     const batchResults = await Promise.all(
-      batch.map(p => {
-        const thr = categoryThresholds?.[p.category ?? ''] ?? thresholdPercent
-        return analyzeProduct(p, thr, minSources, confidenceThresholds, upperOutlierPct)
-      })
+      batch.map(p => analyzeProduct(p, options))
     )
     results.push(...batchResults)
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
@@ -126,6 +126,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [analyzingId, setAnalyzingId] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState<{ id: string; message: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
   const [localProducts, setLocalProducts] = useState<Product[]>(products)
@@ -218,9 +219,25 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
 
   async function handleReanalyze(id: string) {
     setAnalyzingId(id)
+    setAnalysisError(null)
     try {
-      await fetch(`/api/products/${id}/analyze`, { method: 'POST' })
+      const res = await fetch(`/api/products/${id}/analyze`, { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        const retryMinutes = data?.retry_after_seconds
+          ? Math.max(1, Math.ceil(Number(data.retry_after_seconds) / 60))
+          : null
+        setAnalysisError({
+          id,
+          message: retryMinutes
+            ? `Bu ürün kısa süre önce analiz edildi. Yaklaşık ${retryMinutes} dakika sonra tekrar deneyin.`
+            : data?.error ?? 'Analiz başlatılamadı. Lütfen tekrar deneyin.',
+        })
+        return
+      }
       router.refresh()
+    } catch {
+      setAnalysisError({ id, message: 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.' })
     } finally {
       setAnalyzingId(null)
     }
@@ -384,6 +401,12 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
         )}
       </div>
 
+      {analysisError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+          {analysisError.message}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-8 text-center text-sm text-gray-500 dark:text-slate-400">
           Aramanızla eşleşen ürün bulunamadı.
@@ -424,9 +447,13 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                   const fmt = (n: number) => n.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })
                   const isExpanded = expandedRow === p.id
                   const sources: Source[] = Array.isArray(analysis?.sources) ? analysis.sources : []
+                  const analysisAgeDays = analysis
+                    ? Math.floor((Date.now() - new Date(analysis.run_at).getTime()) / (24 * 60 * 60 * 1000))
+                    : null
+                  const isStale = analysisAgeDays != null && analysisAgeDays >= 7
                   return (
-                    <>
-                      <tr key={p.id}
+                    <Fragment key={p.id}>
+                      <tr
                         className={`border-b border-gray-50 dark:border-slate-700 cursor-pointer ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-700/40'}`}
                         onClick={() => setExpandedRow(isExpanded ? null : p.id)}
                       >
@@ -489,10 +516,16 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                         </td>
                         <td className="px-4 py-3 text-center text-xs text-gray-400 dark:text-slate-500">
                           {analysis ? (
-                            <span>
-                              {new Date(analysis.run_at).toLocaleDateString('tr-TR')}{' '}
-                              <span className="text-gray-300 dark:text-slate-600">{new Date(analysis.run_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
-                            </span>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className={isStale ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                {isStale ? 'Güncel değil' : 'Güncel'}
+                                {analysisAgeDays != null && analysisAgeDays > 0 ? ` · ${analysisAgeDays} gün` : ''}
+                              </span>
+                              <span>
+                                {new Date(analysis.run_at).toLocaleDateString('tr-TR')}{' '}
+                                <span className="text-gray-300 dark:text-slate-600">{new Date(analysis.run_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
+                              </span>
+                            </div>
                           ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
@@ -502,7 +535,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                               disabled={analyzingId === p.id}
                               className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 disabled:opacity-40"
                             >
-                              {analyzingId === p.id ? 'Taranıyor...' : 'Yenile'}
+                              {analyzingId === p.id ? 'Taranıyor...' : 'Şimdi analiz et'}
                             </button>
                             <button
                               onClick={() => handleDelete(p.id)}
@@ -524,7 +557,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>

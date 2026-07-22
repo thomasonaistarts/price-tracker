@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { products, threshold_percent, min_sources, category_thresholds } = parsed.data
+  const supabase = await createClient() as any
 
   // Kullanıcının eşleşme hassasiyeti ayarlarını çek
   const settings = await getUserSettings(userId)
@@ -56,6 +57,15 @@ export async function POST(req: NextRequest) {
     medium: settings.confidence_medium / 100,
     low:    settings.confidence_low    / 100,
   }
+  const { data: storedThresholds } = category_thresholds
+    ? { data: null }
+    : await supabase
+      .from('category_thresholds')
+      .select('category, threshold_percent')
+      .eq('user_id', userId)
+  const effectiveCategoryThresholds = category_thresholds ?? Object.fromEntries(
+    (storedThresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
+  )
 
   const startedAt = Date.now()
   const BATCH = 5
@@ -69,13 +79,19 @@ export async function POST(req: NextRequest) {
       break
     }
     const batch = products.slice(i, i + BATCH)
-    const batchResults = await runAnalysis(batch, threshold_percent, min_sources, category_thresholds, confidenceThresholds, settings.outlier_upper_pct ?? 250)
+    const batchResults = await runAnalysis(batch, {
+      thresholdPercent: threshold_percent ?? settings.default_threshold_percent,
+      minSources: min_sources ?? settings.min_sources,
+      categoryThresholds: effectiveCategoryThresholds,
+      confidenceThresholds,
+      upperOutlierPct: settings.outlier_upper_pct,
+      lowerOutlierPct: settings.outlier_filter_pct,
+      activePlatforms: settings.active_platforms,
+    })
     results.push(...batchResults)
   }
 
   const isPartial = skipped > 0
-
-  const supabase = await createClient() as any
 
   const now = new Date().toISOString()
 
@@ -115,6 +131,7 @@ export async function POST(req: NextRequest) {
       threshold_used: result.threshold_used,
       notes: result.notes,
       follow_up: result.follow_up,
+      scraper_health: result.scraper_health,
     })
   }
 

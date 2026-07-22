@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { proxiedUrl } from '@/lib/scrapers/proxy'
+import { validateDebugRequest } from '@/lib/api-security'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -8,6 +9,9 @@ const HEADERS = {
 }
 
 export async function GET(req: NextRequest) {
+  const authError = await validateDebugRequest()
+  if (authError) return authError
+
   const query = req.nextUrl.searchParams.get('q') ?? 'BIC Velleda Tahta Kalemi Siyah 4lü'
 
   const url = `https://www.n11.com/arama?q=${encodeURIComponent(query)}`

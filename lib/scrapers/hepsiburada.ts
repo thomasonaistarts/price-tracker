@@ -18,13 +18,15 @@ const HEADERS_JSON = {
 async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
   const candidates = [
     `https://www.hepsiburada.com/search/api/product-listing/search?q=${encodeURIComponent(query)}&offset=0&limit=20&platform=hepsiburada`,
-    `https://productgw.hepsiburada.com/api/listing?q=${encodeURIComponent(query)}&offset=0&limit=20`,
-    `https://www.hepsiburada.com/api/search?q=${encodeURIComponent(query)}&page=1&pageSize=20`,
   ]
 
   for (const url of candidates) {
     try {
-      const res = await fetch(proxiedUrl(url), { headers: HEADERS_JSON, cache: 'no-store' })
+      const res = await fetch(proxiedUrl(url), {
+        headers: HEADERS_JSON,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(7_000),
+      })
       if (!res.ok) continue
       const ct = res.headers.get('content-type') ?? ''
       if (!ct.includes('json')) continue
@@ -127,6 +129,10 @@ function extractFromRenderedHtml(html: string, query: string): ScrapedPrice[] {
 }
 
 export async function scrapeHepsiburada(query: string): Promise<ScrapedPrice[]> {
+  // Önce daha ucuz iç API isteğini dene; sonuç yoksa render edilmiş sayfaya düş.
+  const apiResults = dedup(await tryInternalApi(query))
+  if (apiResults.length > 0) return apiResults
+
   // render=true ile tam sayfa render (JavaScript çalıştırır — 10 kredi)
   try {
     const url = `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`

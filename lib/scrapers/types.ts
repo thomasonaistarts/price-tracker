@@ -7,6 +7,7 @@ export interface ScrapedPrice {
   // Eşleştirme meta verisi (matchProduct tarafından doldurulur)
   confidence?: 'exact' | 'high' | 'medium' | 'low'
   matchScore?: number
+  comparisonPrice?: number // sorgudaki paket miktarına normalize edilmiş fiyat
   quantityRatio?: number    // aday_miktar / sorgu_miktar (birim fiyat için)
   unitPrice?: number        // ₺/kg, ₺/L, ₺/adet ...
   unitPriceLabel?: string   // "TRY/kg", "TRY/L" ...

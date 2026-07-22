@@ -6,6 +6,13 @@ export async function requireAuth() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) redirect('/auth/login')
+
+  const profile = await getUserProfile(user.id)
+  if (!profile?.is_active) {
+    await supabase.auth.signOut()
+    redirect('/auth/login?reason=inactive')
+  }
+
   return user
 }
 
@@ -23,9 +30,6 @@ export async function getUserProfile(userId: string): Promise<User | null> {
 export async function requireAdmin() {
   const authUser = await requireAuth()
   const profile = await getUserProfile(authUser.id)
-  console.log('requireAdmin - userId:', authUser.id)
-  console.log('requireAdmin - profile:', profile)
-  console.log('requireAdmin - role:', profile?.role)
   if (profile?.role !== 'admin') redirect('/dashboard')
   return { authUser, profile }
 }

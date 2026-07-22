@@ -3,8 +3,11 @@ import { Resend } from 'resend'
 import { requireAdmin } from '@/lib/auth'
 
 export async function GET() {
+  let recipient: string
   try {
-    await requireAdmin()
+    const { authUser } = await requireAdmin()
+    if (!authUser.email) throw new Error('E-posta adresi yok')
+    recipient = authUser.email
   } catch {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
   }
@@ -18,7 +21,7 @@ export async function GET() {
 
   const { data, error } = await resend.emails.send({
     from,
-    to: 'ahmetzotkaci@gmail.com',
+    to: recipient,
     subject: '✅ Fiyatlaa — E-posta testi',
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
