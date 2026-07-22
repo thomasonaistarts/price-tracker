@@ -24,6 +24,7 @@ export interface AnalysisResult {
   confidence: number
   notes: string[]
   scraper_health: PlatformScrapeHealth[]
+  technical_failure: boolean
 }
 
 export interface AnalysisOptions {
@@ -67,6 +68,9 @@ export async function analyzeProduct(
 
   const prices = sources.map(s => s.comparisonPrice ?? s.price).filter(p => p > 0)
   const filtered = iqrFilter(prices)
+  const technicalFailure = sources.length === 0 && scraperHealth.some(
+    ({ status }) => status === 'timeout' || status === 'error',
+  )
 
   if (filtered.length < minSources) {
     return {
@@ -84,6 +88,7 @@ export async function analyzeProduct(
       follow_up: ['manuel_kontrol', 'daha_fazla_kaynak'],
       confidence: 0.2,
       scraper_health: scraperHealth,
+      technical_failure: technicalFailure,
       notes: sources.length === 0
         ? ['Scraper sonuç döndürmedi — ürün adını kontrol edin veya daha sonra tekrar deneyin']
         : [`IQR filtreleme sonrası ${filtered.length} kaynak kaldı`],
@@ -111,6 +116,7 @@ export async function analyzeProduct(
       follow_up: ['manuel_kontrol', 'ürün_adını_güncelle'],
       confidence: 0.1,
       scraper_health: scraperHealth,
+      technical_failure: false,
       notes: [
         `Bizim fiyatımız (₺${our_price}) piyasa ortalamasının (₺${mean}) %${diff.toFixed(0)} üzerinde.`,
         `Bu oran %${upperOutlierPct} eşiğini aştığı için sonuçlar güvenilir sayılmıyor — eşleşen ürünler farklı olabilir.`,
@@ -146,6 +152,7 @@ export async function analyzeProduct(
     alert, alert_reason, follow_up,
     confidence,
     scraper_health: scraperHealth,
+    technical_failure: false,
     notes: [
       `${sources.length} fiyat kaynağı bulundu (${(options.activePlatforms ?? ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol']).join(', ')})`,
     ],

@@ -62,6 +62,17 @@ export async function POST(
     lowerOutlierPct: settings.outlier_filter_pct,
     activePlatforms: settings.active_platforms,
   })
+
+  if (result.technical_failure) {
+    return NextResponse.json(
+      {
+        error: 'Pazar yeri taraması zaman aşımına uğradı. Eski analiz korundu; lütfen tekrar deneyin.',
+        retryable: true,
+      },
+      { status: 503 },
+    )
+  }
+
   const now = new Date().toISOString()
 
   const { error: insertError } = await supabase.from('price_analyses').insert({

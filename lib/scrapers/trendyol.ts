@@ -5,7 +5,7 @@ import type { ScrapedPrice } from './types'
 // Docs: https://apify.com/fatihtahta/trendyol-scraper
 // Pricing: $1 / 1.000 sonuç
 const ACTOR_ID = 'fatihtahta~trendyol-scraper'
-const APIFY_TIMEOUT_S = 40  // run-sync max bekleme süresi
+const APIFY_TIMEOUT_S = 55  // soğuk actor başlangıçlarına tolerans
 
 export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
   const token = process.env.APIFY_TOKEN

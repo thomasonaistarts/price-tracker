@@ -100,6 +100,11 @@ export async function GET(req: NextRequest) {
 
       const product = batch[resultIndex]
       const result = settled.value
+      if (result.technical_failure) {
+        failed += 1
+        return
+      }
+
       const analyzedAt = new Date().toISOString()
       const { error: insertError } = await supabase.from('price_analyses').insert({
         product_id: product.id,

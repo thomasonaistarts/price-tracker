@@ -31,7 +31,7 @@ const TIMEOUT = {
   n11:         12_000,
   pttavm:      12_000,
   idefix:      12_000,
-  trendyol:    35_000,  // Apify run-sync ~15-35s
+  trendyol:    60_000,  // Apify actor soğuk başlangıçta 35 saniyeyi aşabiliyor
 }
 
 class ScraperTimeoutError extends Error {}

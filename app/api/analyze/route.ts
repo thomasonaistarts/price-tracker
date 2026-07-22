@@ -92,10 +92,12 @@ export async function POST(req: NextRequest) {
   }
 
   const isPartial = skipped > 0
+  const completedResults = results.filter((result) => !result.technical_failure)
+  const technicalFailures = results.length - completedResults.length
 
   const now = new Date().toISOString()
 
-  for (const result of results) {
+  for (const result of completedResults) {
     const { data: product, error: productError } = await supabase
       .from('products')
       .upsert({
@@ -135,15 +137,16 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const alertCount = results.filter(
+  const alertCount = completedResults.filter(
     r => r.alert === 'above_market' || r.alert === 'below_market'
   ).length
 
   return NextResponse.json({
     run_timestamp: new Date().toISOString(),
-    products_checked: results.length,
+    products_checked: completedResults.length,
     alerts_count: alertCount,
-    results,
+    results: completedResults,
+    failed: technicalFailures,
     partial: isPartial,
     skipped,
   })
