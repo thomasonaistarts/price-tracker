@@ -4,6 +4,7 @@
 export type UserRole = 'admin' | 'user'
 export type AlertType = 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
 export type AnalysisAttemptStatus = 'success' | 'failed'
+export type SourceDecisionValue = 'approved' | 'rejected'
 
 export interface Database {
   public: {
@@ -37,6 +38,10 @@ export interface Database {
           created_at: string
           updated_at: string
           last_analyzed_at: string | null
+          last_attempted_at: string | null
+          last_attempt_status: AnalysisAttemptStatus | null
+          last_attempt_failure_reason: string | null
+          last_attempt_error: string | null
         }
         Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['products']['Insert']>
@@ -80,6 +85,21 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['analysis_attempts']['Row'], 'id'>
         Update: never
       }
+      source_match_decisions: {
+        Row: {
+          id: string
+          product_id: string
+          user_id: string
+          platform: string
+          source_url: string
+          source_product_name: string | null
+          decision: SourceDecisionValue
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['source_match_decisions']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['source_match_decisions']['Insert']>
+      }
       category_thresholds: {
         Row: {
           id: string
@@ -110,6 +130,7 @@ export type Product = Database['public']['Tables']['products']['Row']
 export type PriceAnalysis = Database['public']['Tables']['price_analyses']['Row']
 export type CategoryThreshold = Database['public']['Tables']['category_thresholds']['Row']
 export type AnalysisAttempt = Database['public']['Tables']['analysis_attempts']['Row']
+export type SourceMatchDecision = Database['public']['Tables']['source_match_decisions']['Row']
 
 // Kullanıcı ayarları — JSONB içeriği
 export interface UserSettings {

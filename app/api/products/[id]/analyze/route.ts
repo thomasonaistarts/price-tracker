@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
+import { getSourceDecisions } from '@/lib/source-decisions'
 
 export const maxDuration = 300
 
@@ -28,12 +29,13 @@ export async function POST(
   if (error || !product) return NextResponse.json({ error: 'Ürün bulunamadı' }, { status: 404 })
 
   const cooldownMs = 10 * 60 * 1000
-  if (product.last_analyzed_at) {
-    const elapsed = Date.now() - new Date(product.last_analyzed_at).getTime()
+  const lastAttemptAt = product.last_attempted_at ?? product.last_analyzed_at
+  if (lastAttemptAt) {
+    const elapsed = Date.now() - new Date(lastAttemptAt).getTime()
     if (elapsed >= 0 && elapsed < cooldownMs) {
       const retryAfterSeconds = Math.ceil((cooldownMs - elapsed) / 1000)
       return NextResponse.json(
-        { error: 'Bu ürün kısa süre önce analiz edildi', retry_after_seconds: retryAfterSeconds },
+        { error: 'Bu ürün için kısa süre önce analiz denendi', retry_after_seconds: retryAfterSeconds },
         { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
       )
     }
@@ -48,6 +50,7 @@ export async function POST(
   const categoryThresholds = Object.fromEntries(
     (thresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
   )
+  const sourceDecisions = await getSourceDecisions(supabase, userId, [product.id])
 
   const result = await analyzeProduct(product, {
     thresholdPercent: settings.default_threshold_percent,
@@ -62,6 +65,7 @@ export async function POST(
     upperOutlierPct: settings.outlier_upper_pct,
     lowerOutlierPct: settings.outlier_filter_pct,
     activePlatforms: settings.active_platforms,
+    sourceDecisions,
   })
 
   if (result.technical_failure) {

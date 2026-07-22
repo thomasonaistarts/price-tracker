@@ -1,5 +1,5 @@
 import type { ScrapedPrice } from './types'
-import { proxiedUrl } from './proxy'
+import { assertScraperResponse, proxiedUrl, ScraperProxyError } from './proxy'
 
 const HEADERS_HTML = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -27,7 +27,14 @@ async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
         cache: 'no-store',
         signal: AbortSignal.timeout(7_000),
       })
-      if (!res.ok) continue
+      if (!res.ok) {
+        try {
+          await assertScraperResponse(res)
+        } catch (error) {
+          if (error instanceof ScraperProxyError && error.code === 'quota_exhausted') throw error
+        }
+        continue
+      }
       const ct = res.headers.get('content-type') ?? ''
       if (!ct.includes('json')) continue
       const data = await res.json()
@@ -46,7 +53,9 @@ async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
           currency: 'TRY',
         }]
       })
-    } catch { /* devam */ }
+    } catch (error) {
+      if (error instanceof ScraperProxyError) throw error
+    }
   }
   return []
 }
@@ -137,7 +146,7 @@ export async function scrapeHepsiburada(query: string): Promise<ScrapedPrice[]> 
   try {
     const url = `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`
     const res = await fetch(proxiedUrl(url, true, false), { headers: HEADERS_HTML, cache: 'no-store' })
-    if (!res.ok) return []
+    await assertScraperResponse(res)
 
     const html = await res.text()
 
@@ -165,8 +174,8 @@ export async function scrapeHepsiburada(query: string): Promise<ScrapedPrice[]> 
 
     // Regex fallback
     return dedup(extractFromRenderedHtml(html, query))
-  } catch {
-    return []
+  } catch (error) {
+    throw error
   }
 }
 

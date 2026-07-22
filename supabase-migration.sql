@@ -42,6 +42,10 @@ create table public.products (
   currency      text not null default 'TRY',
   is_active     boolean not null default true,
   last_analyzed_at timestamptz,
+  last_attempted_at timestamptz,
+  last_attempt_status text check (last_attempt_status in ('success', 'failed')),
+  last_attempt_failure_reason text,
+  last_attempt_error text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   unique(user_id, sku)
@@ -89,6 +93,32 @@ create table public.analysis_attempts (
 );
 
 -- -----------------------------------------------
+-- source_match_decisions tablosu
+-- Kullanıcının doğru/yanlış kaynak eşleşmesi kararları
+-- -----------------------------------------------
+create table public.source_match_decisions (
+  id                  uuid primary key default uuid_generate_v4(),
+  product_id          uuid not null references public.products(id) on delete cascade,
+  user_id             uuid not null references public.users(id) on delete cascade,
+  platform            text not null,
+  source_url          text not null,
+  source_product_name text,
+  decision            text not null check (decision in ('approved', 'rejected')),
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique(product_id, platform, source_url)
+);
+
+create view public.latest_price_analyses
+with (security_invoker = true)
+as
+select distinct on (product_id) *
+from public.price_analyses
+order by product_id, run_at desc;
+
+grant select on public.latest_price_analyses to authenticated;
+
+-- -----------------------------------------------
 -- category_thresholds tablosu
 -- Kullanıcı başına kategori eşikleri
 -- -----------------------------------------------
@@ -123,6 +153,10 @@ create trigger trg_products_updated_at
 
 create trigger trg_thresholds_updated_at
   before update on public.category_thresholds
+  for each row execute function update_updated_at();
+
+create trigger trg_source_match_decisions_updated_at
+  before update on public.source_match_decisions
   for each row execute function update_updated_at();
 
 -- -----------------------------------------------
@@ -184,6 +218,7 @@ alter table public.users enable row level security;
 alter table public.products enable row level security;
 alter table public.price_analyses enable row level security;
 alter table public.analysis_attempts enable row level security;
+alter table public.source_match_decisions enable row level security;
 alter table public.category_thresholds enable row level security;
 
 -- users: admin herkesi görür, user sadece kendini
@@ -214,6 +249,13 @@ create policy "analysis_attempts_select" on public.analysis_attempts for select 
 );
 create policy "analysis_attempts_insert" on public.analysis_attempts for insert with check (user_id = auth.uid());
 
+create policy "source_match_decisions_select" on public.source_match_decisions for select using (
+  user_id = auth.uid() or public.is_admin()
+);
+create policy "source_match_decisions_insert" on public.source_match_decisions for insert with check (user_id = auth.uid());
+create policy "source_match_decisions_update" on public.source_match_decisions for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "source_match_decisions_delete" on public.source_match_decisions for delete using (user_id = auth.uid());
+
 -- category_thresholds: kendi eşiklerini yönetir
 create policy "thresholds_all" on public.category_thresholds for all using (user_id = auth.uid());
 
@@ -223,12 +265,14 @@ create policy "thresholds_all" on public.category_thresholds for all using (user
 create index idx_products_user_id on public.products(user_id);
 create index idx_products_sku on public.products(user_id, sku);
 create index idx_products_refresh_queue on public.products(is_active, last_analyzed_at);
+create index idx_products_analysis_queue on public.products(is_active, last_attempted_at, last_analyzed_at);
 create index idx_analyses_product_id on public.price_analyses(product_id);
 create index idx_analyses_user_id on public.price_analyses(user_id);
 create index idx_analyses_run_at on public.price_analyses(run_at desc);
 create index idx_analyses_alert on public.price_analyses(alert);
 create index idx_analysis_attempts_product_time on public.analysis_attempts(product_id, attempted_at desc);
 create index idx_analysis_attempts_user_time on public.analysis_attempts(user_id, attempted_at desc);
+create index idx_source_match_decisions_user_product on public.source_match_decisions(user_id, product_id);
 create index idx_thresholds_user_id on public.category_thresholds(user_id);
 
 -- -----------------------------------------------

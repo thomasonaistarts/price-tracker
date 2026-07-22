@@ -1,10 +1,11 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
 import { downloadExcel } from '@/lib/exportExcel'
+import { sourceDecisionKey, type SourceDecisionRule, type SourceDecisionValue } from '@/lib/source-decisions'
 
 interface Source {
   site: string
@@ -14,6 +15,8 @@ interface Source {
   unitPrice?: number
   unitPriceLabel?: string
   quantityRatio?: number
+  product_name?: string
+  manualDecision?: 'approved'
 }
 interface LatestAnalysis {
   product_id: string
@@ -70,7 +73,27 @@ function ConfidenceDots({ sources }: { sources: Source[] }) {
   )
 }
 
-function ProductSourceGroups({ sources, fmt }: { sources: Source[]; fmt: (n: number) => string }) {
+function productDecisionKey(productId: string, platform: string, sourceUrl: string) {
+  return `${productId}|${sourceDecisionKey(platform, sourceUrl)}`
+}
+
+function ProductSourceGroups({
+  productId,
+  sources,
+  fmt,
+  decisionMap,
+  savingKey,
+  onDecision,
+  onClear,
+}: {
+  productId: string
+  sources: Source[]
+  fmt: (n: number) => string
+  decisionMap: Record<string, SourceDecisionRule>
+  savingKey: string | null
+  onDecision: (productId: string, source: Source, decision: SourceDecisionValue) => void
+  onClear: (productId: string, source: Source) => void
+}) {
   const groups = CONF_GROUPS.map(g => ({
     ...g,
     items: sources.filter(s => (s.confidence ?? 'high') === g.key),
@@ -83,39 +106,84 @@ function ProductSourceGroups({ sources, fmt }: { sources: Source[]; fmt: (n: num
           <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border mb-2 ${g.badge}`}>
             {g.label}
           </span>
-          <div className="flex flex-wrap gap-1.5">
-            {g.items.map((s, i) => (
-              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-700 border rounded-lg text-xs transition-colors ${g.border}`}>
-                <PlatformLogo name={s.site} size={14} />
-                <span className="font-medium text-gray-700 dark:text-slate-200">{s.site}</span>
-                <span className="text-blue-600 dark:text-blue-400 font-semibold">{fmt(s.price)}</span>
-                {s.unitPrice != null && s.unitPriceLabel && (
-                  <span className="text-gray-400 dark:text-slate-500" title={`Oran: ${s.quantityRatio?.toFixed(2)}x`}>
-                    ≈{s.unitPrice.toFixed(1)}&nbsp;{s.unitPriceLabel}
-                  </span>
-                )}
-              </a>
-            ))}
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {g.items.map((source, index) => {
+              const key = productDecisionKey(productId, source.site, source.url)
+              const savedDecision = decisionMap[key]
+              const isSaving = savingKey === key
+              return (
+                <div
+                  key={`${source.site}|${source.url}|${index}`}
+                  className={`rounded-lg border bg-white p-2 text-xs transition-colors dark:bg-slate-700 ${g.border} ${savedDecision?.decision === 'rejected' ? 'opacity-60' : ''}`}
+                >
+                  <a href={source.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                    <PlatformLogo name={source.site} size={14} />
+                    <span className="font-medium text-gray-700 dark:text-slate-200">{source.site}</span>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{fmt(source.price)}</span>
+                    {source.unitPrice != null && source.unitPriceLabel && (
+                      <span className="text-gray-400 dark:text-slate-500" title={`Oran: ${source.quantityRatio?.toFixed(2)}x`}>
+                        ≈{source.unitPrice.toFixed(1)}&nbsp;{source.unitPriceLabel}
+                      </span>
+                    )}
+                  </a>
+                  {source.product_name && (
+                    <p className="mt-1 truncate text-[11px] text-gray-400 dark:text-slate-500" title={source.product_name}>
+                      {source.product_name}
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-1.5 border-t border-gray-100 pt-2 dark:border-slate-600">
+                    {savedDecision ? (
+                      <>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${savedDecision.decision === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                          {savedDecision.decision === 'approved' ? 'Onaylandı' : 'Yanlış eşleşme'}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => onClear(productId, source)}
+                          className="text-[11px] text-gray-500 hover:text-gray-800 disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                          {isSaving ? 'Kaydediliyor…' : 'Geri al'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => onDecision(productId, source, 'approved')}
+                          className="rounded border border-emerald-200 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+                        >
+                          Onayla
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => onDecision(productId, source, 'rejected')}
+                          className="rounded border border-red-200 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/30"
+                        >
+                          Yanlış eşleşme
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}
+      <p className="text-[11px] text-gray-400 dark:text-slate-500">
+        Kaynak kararları bir sonraki manuel veya otomatik analizde uygulanır.
+      </p>
     </div>
   )
-}
-
-interface LatestAttempt {
-  product_id: string
-  attempted_at: string
-  status: 'success' | 'failed'
-  failure_reason: string | null
-  error_message: string | null
 }
 
 interface Props {
   products: Product[]
   latestAnalyses: LatestAnalysis[]
-  latestAttempts: LatestAttempt[]
+  sourceDecisions: SourceDecisionRule[]
 }
 
 function alertBadge(alert: string) {
@@ -129,7 +197,9 @@ type DiffOp = '' | 'lt' | 'lte' | 'eq' | 'gte' | 'gt'
 type AlertKey = 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
 type ConfKey = 'exact' | 'high' | 'medium' | 'low'
 
-export default function ProductsClient({ products, latestAnalyses, latestAttempts }: Props) {
+const PAGE_SIZE = 100
+
+export default function ProductsClient({ products, latestAnalyses, sourceDecisions }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
@@ -140,15 +210,81 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
   const [editPrice, setEditPrice] = useState('')
   const [localProducts, setLocalProducts] = useState<Product[]>(products)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [localDecisions, setLocalDecisions] = useState<SourceDecisionRule[]>(sourceDecisions)
+  const [decisionSavingKey, setDecisionSavingKey] = useState<string | null>(null)
 
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [alertFilter, setAlertFilter] = useState<AlertKey[]>([])
   const [confidenceFilter, setConfidenceFilter] = useState<ConfKey[]>([])
   const [diffOp, setDiffOp] = useState<DiffOp>('')
   const [diffVal, setDiffVal] = useState('')
+  const [failedOnly, setFailedOnly] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const analysisMap = Object.fromEntries(latestAnalyses.map(a => [a.product_id, a]))
-  const attemptMap = Object.fromEntries(latestAttempts.map(a => [a.product_id, a]))
+  const decisionMap = Object.fromEntries(localDecisions.map((decision) => [
+    productDecisionKey(decision.product_id, decision.platform, decision.source_url),
+    decision,
+  ]))
+
+  async function handleSourceDecision(productId: string, source: Source, decision: SourceDecisionValue) {
+    const key = productDecisionKey(productId, source.site, source.url)
+    setDecisionSavingKey(key)
+    setAnalysisError(null)
+    try {
+      const response = await fetch(`/api/products/${productId}/source-decisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: source.site,
+          source_url: source.url,
+          source_product_name: source.product_name ?? null,
+          decision,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Kaynak kararı kaydedilemedi')
+      setLocalDecisions((current) => [
+        ...current.filter((item) => productDecisionKey(item.product_id, item.platform, item.source_url) !== key),
+        payload.decision,
+      ])
+    } catch (error) {
+      setAnalysisError({ id: productId, message: error instanceof Error ? error.message : 'Kaynak kararı kaydedilemedi' })
+    } finally {
+      setDecisionSavingKey(null)
+    }
+  }
+
+  async function handleClearSourceDecision(productId: string, source: Source) {
+    const key = productDecisionKey(productId, source.site, source.url)
+    setDecisionSavingKey(key)
+    setAnalysisError(null)
+    try {
+      const response = await fetch(`/api/products/${productId}/source-decisions`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: source.site, source_url: source.url }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Kaynak kararı kaldırılamadı')
+      setLocalDecisions((current) => current.filter(
+        (item) => productDecisionKey(item.product_id, item.platform, item.source_url) !== key,
+      ))
+    } catch (error) {
+      setAnalysisError({ id: productId, message: error instanceof Error ? error.message : 'Kaynak kararı kaldırılamadı' })
+    } finally {
+      setDecisionSavingKey(null)
+    }
+  }
+
+  function hasLatestFailure(product: Product) {
+    const analysis: LatestAnalysis | undefined = analysisMap[product.id]
+    return product.last_attempt_status === 'failed' && product.last_attempted_at != null && (
+      !analysis || new Date(product.last_attempted_at).getTime() > new Date(analysis.run_at).getTime()
+    )
+  }
+
+  const failedAttemptCount = localProducts.filter(hasLatestFailure).length
 
   const categories = Array.from(
     new Set(localProducts.map(p => p.category).filter(Boolean) as string[])
@@ -162,11 +298,11 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
   }
 
   const hasActiveFilters = categoryFilter !== 'all' || alertFilter.length > 0 ||
-    confidenceFilter.length > 0 || (diffOp !== '' && diffVal !== '')
+    confidenceFilter.length > 0 || (diffOp !== '' && diffVal !== '') || failedOnly
 
   function resetFilters() {
     setCategoryFilter('all'); setAlertFilter([]); setConfidenceFilter([])
-    setDiffOp(''); setDiffVal('')
+    setDiffOp(''); setDiffVal(''); setFailedOnly(false)
   }
 
   const filtered = localProducts.filter(p => {
@@ -175,6 +311,7 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
       p.sku.toLowerCase().includes(q) || (p.brand ?? '').toLowerCase().includes(q)
     const matchesStatus = status === 'all' || (status === 'active' ? p.is_active : !p.is_active)
     const matchesCategory = categoryFilter === 'all' || (p.category ?? '') === categoryFilter
+    const matchesFailedAttempt = !failedOnly || hasLatestFailure(p)
 
     const analysis = analysisMap[p.id]
     const matchesAlert = alertFilter.length === 0 ||
@@ -199,8 +336,18 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
       }
     }
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesAlert && matchesConf && matchesDiff
+    return matchesSearch && matchesStatus && matchesCategory && matchesFailedAttempt &&
+      matchesAlert && matchesConf && matchesDiff
   })
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safeCurrentPage = Math.min(currentPage, pageCount)
+  const pageStart = (safeCurrentPage - 1) * PAGE_SIZE
+  const visibleProducts = filtered.slice(pageStart, pageStart + PAGE_SIZE)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, status, categoryFilter, alertFilter, confidenceFilter, diffOp, diffVal, failedOnly])
 
   async function handleDelete(id: string) {
     if (!confirm('Bu ürün ve tüm analiz geçmişi silinecek. Emin misiniz?')) return
@@ -355,6 +502,20 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
           </div>
         </div>
 
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-400 dark:text-slate-500 font-medium whitespace-nowrap">Deneme</span>
+          <button
+            onClick={() => setFailedOnly(value => !value)}
+            className={`px-2 py-0.5 rounded-md text-xs border font-medium transition-colors ${
+              failedOnly
+                ? 'bg-red-50 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700'
+                : 'bg-white dark:bg-slate-700 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-600 hover:border-red-300 hover:text-red-600'
+            }`}
+          >
+            Başarısız {failedAttemptCount}
+          </button>
+        </div>
+
         {/* Kaynak güven seviyesi */}
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-gray-400 dark:text-slate-500 font-medium whitespace-nowrap">Kaynak</span>
@@ -453,7 +614,7 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
-                {filtered.map((p) => {
+                {visibleProducts.map((p) => {
                   const analysis = analysisMap[p.id]
                   const fmt = (n: number) => n.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })
                   const isExpanded = expandedRow === p.id
@@ -462,10 +623,7 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
                     ? Math.floor((Date.now() - new Date(analysis.run_at).getTime()) / (24 * 60 * 60 * 1000))
                     : null
                   const isStale = analysisAgeDays != null && analysisAgeDays >= 7
-                  const latestAttempt: LatestAttempt | undefined = attemptMap[p.id]
-                  const persistedFailure = latestAttempt?.status === 'failed' && (
-                    !analysis || new Date(latestAttempt.attempted_at).getTime() > new Date(analysis.run_at).getTime()
-                  )
+                  const persistedFailure = hasLatestFailure(p)
                   return (
                     <Fragment key={p.id}>
                       <tr
@@ -542,13 +700,13 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
                               </span>
                             </div>
                           ) : <span>Başarılı analiz yok</span>}
-                          {persistedFailure && latestAttempt && (
+                          {persistedFailure && p.last_attempted_at && (
                             <div
                               className="mt-1 flex flex-col items-center text-red-600 dark:text-red-400"
-                              title={latestAttempt.error_message ?? 'Pazar yeri taraması tamamlanamadı'}
+                              title={p.last_attempt_error ?? 'Pazar yeri taraması tamamlanamadı'}
                             >
                               <span>Son deneme başarısız</span>
-                              <span>{new Date(latestAttempt.attempted_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                              <span>{new Date(p.last_attempted_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                             </div>
                           )}
                         </td>
@@ -574,7 +732,15 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
                       {isExpanded && sources.length > 0 && (
                         <tr key={`${p.id}-detail`} className="bg-blue-50 dark:bg-blue-900/20">
                           <td colSpan={10} className="px-6 py-4">
-                            <ProductSourceGroups sources={sources} fmt={fmt} />
+                            <ProductSourceGroups
+                              productId={p.id}
+                              sources={sources}
+                              fmt={fmt}
+                              decisionMap={decisionMap}
+                              savingKey={decisionSavingKey}
+                              onDecision={handleSourceDecision}
+                              onClear={handleClearSourceDecision}
+                            />
                             {analysis?.alert_reason && (
                               <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">{analysis.alert_reason}</p>
                             )}
@@ -587,6 +753,32 @@ export default function ProductsClient({ products, latestAnalyses, latestAttempt
               </tbody>
             </table>
           </div>
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 dark:border-slate-700">
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)} / {filtered.length} ürün
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Önceki
+                </button>
+                <span className="min-w-[72px] text-center text-xs text-gray-500 dark:text-slate-400">
+                  {safeCurrentPage} / {pageCount}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(page => Math.min(pageCount, page + 1))}
+                  disabled={safeCurrentPage === pageCount}
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

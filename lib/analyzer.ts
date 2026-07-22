@@ -1,5 +1,6 @@
 import type { ProductInput } from '@/lib/validations'
 import { scrapeAllPlatforms, type ScrapedPrice, type ConfidenceThresholds, type PlatformScrapeHealth, DEFAULT_CONFIDENCE_THRESHOLDS } from '@/lib/scrapers'
+import type { SourceDecisionRule } from '@/lib/source-decisions'
 
 export type { ScrapedPrice }
 
@@ -35,6 +36,7 @@ export interface AnalysisOptions {
   upperOutlierPct?: number
   lowerOutlierPct?: number
   activePlatforms?: string[]
+  sourceDecisions?: SourceDecisionRule[]
 }
 
 function r2(n: number) { return Math.round(n * 100) / 100 }
@@ -63,6 +65,7 @@ export async function analyzeProduct(
     thresholds: options.confidenceThresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS,
     activePlatforms: options.activePlatforms,
     lowerOutlierPct: options.lowerOutlierPct,
+    sourceDecisions: options.sourceDecisions,
     onHealth: (health) => { scraperHealth = health },
   })
 

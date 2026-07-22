@@ -3,29 +3,40 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getUserSettings } from '@/lib/user-settings'
 import SettingsClient from '@/components/admin/SettingsClient'
 import type { CategoryThreshold } from '@/types/database'
+import { fetchAllRows } from '@/lib/supabase/paginate'
+import { summarizePlatformHealth, type AnalysisHealthRow } from '@/lib/platform-health'
+import PlatformHealthPanel from '@/components/admin/PlatformHealthPanel'
 
 export default async function AdminSettingsPage() {
   const { authUser } = await requireAdmin()
   const supabase = createAdminClient() as any
 
-  const [settings, thresholdsResult, categoriesResult] = await Promise.all([
+  const healthCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const [settings, thresholdsResult, categoryRows, healthRows] = await Promise.all([
     getUserSettings(authUser.id),
     supabase
       .from('category_thresholds')
       .select('*')
       .eq('user_id', authUser.id)
       .order('category'),
-    supabase
+    fetchAllRows<{ category: string }>(async (from, to) => supabase
       .from('products')
       .select('category')
       .eq('user_id', authUser.id)
-      .not('category', 'is', null),
+      .not('category', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, to)),
+    fetchAllRows<AnalysisHealthRow>(async (from, to) => supabase
+      .from('analysis_attempts')
+      .select('attempted_at, scraper_health')
+      .eq('user_id', authUser.id)
+      .gte('attempted_at', healthCutoff)
+      .order('attempted_at', { ascending: false })
+      .range(from, to)),
   ])
 
-  const rawCategories: string[] = (categoriesResult.data ?? [])
-    .map((p: { category: string }) => p.category)
-    .filter(Boolean)
-  const productCategories = Array.from(new Set(rawCategories)).sort() as string[]
+  const productCategories = Array.from(new Set(categoryRows.map(row => row.category))).sort()
+  const platformHealth = summarizePlatformHealth(healthRows)
 
   return (
     <div>
@@ -35,6 +46,7 @@ export default async function AdminSettingsPage() {
           Fiyat analizi parametreleri, aktif platformlar ve bildirim tercihlerinizi yönetin
         </p>
       </div>
+      <PlatformHealthPanel summaries={platformHealth} />
       <SettingsClient
         initialSettings={settings}
         initialThresholds={(thresholdsResult.data ?? []) as CategoryThreshold[]}

@@ -1,3 +1,26 @@
+export type ScraperProxyErrorCode = 'quota_exhausted' | 'http_4xx' | 'http_5xx'
+
+export class ScraperProxyError extends Error {
+  readonly code: ScraperProxyErrorCode
+
+  constructor(code: ScraperProxyErrorCode) {
+    super(code)
+    this.name = 'ScraperProxyError'
+    this.code = code
+  }
+}
+
+export async function assertScraperResponse(response: Response) {
+  if (response.ok) return
+
+  const body = await response.text().catch(() => '')
+  if (body.toLowerCase().includes('exhausted the api credits')) {
+    throw new ScraperProxyError('quota_exhausted')
+  }
+
+  throw new ScraperProxyError(response.status >= 500 ? 'http_5xx' : 'http_4xx')
+}
+
 /**
  * ScraperAPI proxy helper.
  * render=true       → JS çalıştırır (SPA sayfalar) — 10 kredi/istek

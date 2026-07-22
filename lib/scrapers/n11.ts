@@ -1,5 +1,5 @@
 import type { ScrapedPrice } from './types'
-import { proxiedUrl } from './proxy'
+import { assertScraperResponse, proxiedUrl } from './proxy'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -78,10 +78,10 @@ export async function scrapeN11(query: string): Promise<ScrapedPrice[]> {
   try {
     const url = `https://www.n11.com/arama?q=${encodeURIComponent(query)}`
     const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store' })
-    if (!res.ok) return []
+    await assertScraperResponse(res)
     const html = await res.text()
     return parseN11Html(html, query)
-  } catch {
-    return []
+  } catch (error) {
+    throw error
   }
 }

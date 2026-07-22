@@ -5,6 +5,7 @@ import { validateCronRequest } from '@/lib/api-security'
 import { computeReportData, generateWeeklyEmailHtml } from '@/lib/email-report'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getUserSettings, updateUserSettings } from '@/lib/user-settings'
+import { fetchAllRows } from '@/lib/supabase/paginate'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -44,14 +45,11 @@ export async function GET(req: NextRequest) {
   const { day, hour } = getIstanbulSchedule()
 
   const { data: userRows } = await supabase
-    .from('products')
-    .select('user_id, users!inner(is_active)')
+    .from('users')
+    .select('id')
     .eq('is_active', true)
-    .eq('users.is_active', true)
 
-  const userIds: string[] = Array.from(
-    new Set<string>((userRows ?? []).map((row: any) => row.user_id as string)),
-  )
+  const userIds: string[] = (userRows ?? []).map((row: any) => row.id as string)
   if (userIds.length === 0) {
     return NextResponse.json({ sent: 0, message: 'Aktif ürün sahibi kullanıcı yok' })
   }
@@ -85,32 +83,40 @@ export async function GET(req: NextRequest) {
         continue
       }
 
-      const [{ data: rawAnalyses }, { data: history }] = await Promise.all([
-        supabase
-          .from('price_analyses')
-          .select(`
-            product_id, run_at, alert, alert_reason, price_diff_percent,
-            market_mean, min_price, sources_count, sources,
-            products(sku, product_name, our_price, brand, category)
-          `)
+      const [latestAnalyses, productRows, history] = await Promise.all([
+        fetchAllRows<any>(async (from, to) => supabase
+          .from('latest_price_analyses')
+          .select('product_id, run_at, alert, alert_reason, price_diff_percent, market_mean, min_price, sources_count, sources')
           .eq('user_id', userId)
           .order('run_at', { ascending: false })
-          .limit(5000),
-        supabase
+          .range(from, to)),
+        fetchAllRows<any>(async (from, to) => supabase
+          .from('products')
+          .select('id, sku, product_name, our_price, brand, category')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('id', { ascending: true })
+          .range(from, to)),
+        fetchAllRows<any>(async (from, to) => supabase
           .from('price_analyses')
           .select('run_at, alert, product_id')
           .eq('user_id', userId)
           .gte('run_at', since)
           .order('run_at', { ascending: false })
-          .limit(10000),
+          .range(from, to)),
       ])
 
-      if (!rawAnalyses?.length) {
+      const productMap = new Map(productRows.map(product => [product.id, product]))
+      const rawAnalyses = latestAnalyses
+        .filter(analysis => productMap.has(analysis.product_id))
+        .map(analysis => ({ ...analysis, products: productMap.get(analysis.product_id) }))
+
+      if (!rawAnalyses.length) {
         skipped += 1
         continue
       }
 
-      const reportData = computeReportData(rawAnalyses, history ?? [], user.email)
+      const reportData = computeReportData(rawAnalyses, history, user.email)
       if (reportData.summary.total === 0) {
         skipped += 1
         continue

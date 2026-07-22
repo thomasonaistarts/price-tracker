@@ -5,6 +5,8 @@ import { scrapeIdefix } from './idefix'
 import { scrapeTrendyol } from './trendyol'
 import { matchProduct, calcUnitPrice, type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS } from './similarity'
 import type { ScrapedPrice } from './types'
+import { ScraperProxyError, type ScraperProxyErrorCode } from './proxy'
+import { sourceDecisionKey, type SourceDecisionRule } from '@/lib/source-decisions'
 
 export type { ScrapedPrice }
 
@@ -15,6 +17,7 @@ export interface ScrapeOptions {
   thresholds?: ConfidenceThresholds
   activePlatforms?: string[]
   lowerOutlierPct?: number
+  sourceDecisions?: SourceDecisionRule[]
   onHealth?: (health: PlatformScrapeHealth[]) => void
 }
 
@@ -23,6 +26,7 @@ export interface PlatformScrapeHealth {
   status: 'success' | 'empty' | 'timeout' | 'error'
   resultCount: number
   durationMs: number
+  errorCode?: ScraperProxyErrorCode
 }
 
 // Platform başına timeout — render gerektiren Hepsiburada daha uzun
@@ -68,6 +72,7 @@ async function runScraper(
         status: error instanceof ScraperTimeoutError ? 'timeout' : 'error',
         resultCount: 0,
         durationMs: Date.now() - startedAt,
+        errorCode: error instanceof ScraperProxyError ? error.code : undefined,
       },
     }
   } finally {
@@ -96,18 +101,30 @@ export async function scrapeAllPlatforms(
   const all = platformResults.flatMap((result) => result.items)
 
   const results: ScrapedPrice[] = []
+  const decisionMap = new Map(
+    (options.sourceDecisions ?? []).map((decision) => [
+      sourceDecisionKey(decision.platform, decision.source_url),
+      decision.decision,
+    ]),
+  )
 
   for (const item of all) {
+    const decision = decisionMap.get(sourceDecisionKey(item.site, item.url))
+    if (decision === 'rejected') continue
+
     const mr = matchProduct(query, item.product_name, thresholds)
+    const manuallyApproved = decision === 'approved'
 
-    // Rejected → atla
-    if (mr.confidence === 'rejected') continue
+    // Otomatik eşleştirici reddettiyse yalnızca manuel onay bu kararı geçersiz kılabilir.
+    if (!manuallyApproved && mr.confidence === 'rejected') continue
 
+    const automaticConfidence = mr.confidence === 'rejected' ? 'low' : mr.confidence
     const enriched: ScrapedPrice = {
       ...item,
-      confidence: mr.confidence,
-      matchScore: mr.score,
-      matchReasons: mr.reasons,
+      confidence: manuallyApproved ? 'exact' : automaticConfidence,
+      matchScore: manuallyApproved ? 1 : mr.score,
+      matchReasons: manuallyApproved ? ['Kullanıcı tarafından onaylandı'] : mr.reasons,
+      manualDecision: manuallyApproved ? 'approved' : undefined,
     }
 
     // Miktar oranı varsa → birim fiyat hesapla (ekran boyutu için birim fiyat hesaplanmaz)
@@ -148,7 +165,7 @@ function filterPriceOutliers(items: ScrapedPrice[], lowerOutlierPct: number): Sc
   const sorted = [...items].map(i => i.comparisonPrice ?? i.price).sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)]
   const floor = median * Math.min(100, Math.max(1, lowerOutlierPct)) / 100
-  return items.filter(i => (i.comparisonPrice ?? i.price) >= floor)
+  return items.filter(i => i.manualDecision === 'approved' || (i.comparisonPrice ?? i.price) >= floor)
 }
 
 /**
@@ -158,7 +175,9 @@ function filterPriceOutliers(items: ScrapedPrice[], lowerOutlierPct: number): Sc
 function cheapestPerSiteAndConfidence(items: ScrapedPrice[]): ScrapedPrice[] {
   const map = new Map<string, ScrapedPrice>()
   for (const item of items) {
-    const key = `${item.site}|${item.confidence ?? 'high'}`
+    const key = item.manualDecision === 'approved'
+      ? `${item.site}|approved|${item.url}`
+      : `${item.site}|${item.confidence ?? 'high'}`
     const existing = map.get(key)
     if (!existing || item.price < existing.price) {
       map.set(key, item)

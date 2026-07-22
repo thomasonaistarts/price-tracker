@@ -2,6 +2,7 @@ import { requireAuth, getUserProfile } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { AlertType } from '@/types/database'
+import { fetchAllRows } from '@/lib/supabase/paginate'
 
 // ── Tipler ────────────────────────────────────────────────────────────────────
 
@@ -31,28 +32,27 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   const supabase = createAdminClient() as any
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
 
-  const [productsRes, analysesRes] = await Promise.all([
-    supabase
+  const [products, analysisRows] = await Promise.all([
+    fetchAllRows<any>(async (from, to) => supabase
       .from('products')
-      .select('id', { count: 'exact' })
+      .select('id, product_name, category, our_price')
       .eq('user_id', userId)
-      .eq('is_active', true),
-    supabase
-      .from('price_analyses')
-      .select('product_id, alert, price_diff_percent, sources_count, run_at, products(product_name, category, our_price)')
+      .eq('is_active', true)
+      .order('id', { ascending: true })
+      .range(from, to)),
+    fetchAllRows<any>(async (from, to) => supabase
+      .from('latest_price_analyses')
+      .select('product_id, alert, price_diff_percent, sources_count, run_at')
       .eq('user_id', userId)
       .gte('run_at', thirtyDaysAgo)
       .order('run_at', { ascending: false })
-      .limit(1000),
+      .range(from, to)),
   ])
 
-  const allAnalyses = (analysesRes.data ?? []) as AnalysisRow[]
-
-  const latestMap = new Map<string, AnalysisRow>()
-  for (const a of allAnalyses) {
-    if (!latestMap.has(a.product_id)) latestMap.set(a.product_id, a)
-  }
-  const latest = Array.from(latestMap.values())
+  const productMap = new Map(products.map(product => [product.id, product]))
+  const latest = analysisRows
+    .filter(analysis => productMap.has(analysis.product_id))
+    .map(analysis => ({ ...analysis, products: productMap.get(analysis.product_id) })) as AnalysisRow[]
 
   const alertCounts: Record<AlertType, number> = {
     above_market: 0, below_market: 0, no_alert: 0, insufficient_data: 0,
@@ -90,13 +90,13 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   const avgDiff = diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null
 
   return {
-    totalProducts: productsRes.count ?? 0,
+    totalProducts: products.length,
     analyzedCount: latest.length,
     alertCounts,
     topAbove,
     topBelow,
     categoryBreakdown,
-    lastRun: allAnalyses[0]?.run_at ?? null,
+    lastRun: latest[0]?.run_at ?? null,
     avgDiff,
   }
 }

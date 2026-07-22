@@ -174,6 +174,8 @@ export function computeReportData(
     if (!prod.has(h.product_id)) prod.set(h.product_id, h.alert)
   }
   const weeks: WeekItem[] = Array.from(weekProductMap.entries())
+    .sort(([weekA], [weekB]) => weekA.localeCompare(weekB))
+    .slice(-8)
     .map(([ws, products]) => {
       const alerts = Array.from(products.values())
       return {
@@ -184,8 +186,6 @@ export function computeReportData(
         total: alerts.length,
       }
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(-8)
 
   // Platform karşılaştırması
   const platMap = new Map<string, { appearances: number; cheapest: number; totalDiff: number; diffCount: number }>()
@@ -450,7 +450,7 @@ export function generateWeeklyEmailHtml(data: WeeklyReportData): string {
         <tr>
           <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #f3f4f6;">
             <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">
-              Fiyat Takip Sistemi &nbsp;·&nbsp; Bu rapor otomatik olarak her Pazartesi sabahı gönderilmektedir.
+              Fiyat Takip Sistemi &nbsp;·&nbsp; Bu rapor belirlediğiniz haftalık programa göre otomatik gönderilmiştir.
             </p>
           </td>
         </tr>

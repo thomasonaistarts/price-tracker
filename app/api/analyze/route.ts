@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth'
 import { analyzeSchema } from '@/lib/validations'
-import { runAnalysis } from '@/lib/analyzer'
+import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
+import { getSourceDecisions, groupSourceDecisionsByProduct } from '@/lib/source-decisions'
 
 // Vercel Pro: 300s max — ScraperAPI premium+render ~30s/ürün
 export const maxDuration = 300
@@ -68,9 +69,24 @@ export async function POST(req: NextRequest) {
     (storedThresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
   )
 
+  const existingProducts: { id: string; sku: string }[] = []
+  const skuBatchSize = 200
+  for (let index = 0; index < products.length; index += skuBatchSize) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, sku')
+      .eq('user_id', userId)
+      .in('sku', products.slice(index, index + skuBatchSize).map((product) => product.sku))
+    if (error) return NextResponse.json({ error: 'Mevcut ürünler okunamadı' }, { status: 500 })
+    existingProducts.push(...(data ?? []))
+  }
+  const existingBySku = new Map(existingProducts.map((product) => [product.sku, product.id]))
+  const sourceDecisions = await getSourceDecisions(supabase, userId, existingProducts.map((product) => product.id))
+  const decisionsByProduct = groupSourceDecisionsByProduct(sourceDecisions)
+
   const startedAt = Date.now()
   const BATCH = 5
-  const results: Awaited<ReturnType<typeof runAnalysis>> = []
+  const results: Awaited<ReturnType<typeof analyzeProduct>>[] = []
   let skipped = 0
 
   // Zaman bütçesine göre batch batch işle — timeout'tan önce dur
@@ -80,15 +96,19 @@ export async function POST(req: NextRequest) {
       break
     }
     const batch = products.slice(i, i + BATCH)
-    const batchResults = await runAnalysis(batch, {
-      thresholdPercent: threshold_percent ?? settings.default_threshold_percent,
-      minSources: min_sources ?? settings.min_sources,
-      categoryThresholds: effectiveCategoryThresholds,
-      confidenceThresholds,
-      upperOutlierPct: settings.outlier_upper_pct,
-      lowerOutlierPct: settings.outlier_filter_pct,
-      activePlatforms: settings.active_platforms,
-    })
+    const batchResults = await Promise.all(batch.map((product) => {
+      const existingProductId = existingBySku.get(product.sku)
+      return analyzeProduct(product, {
+        thresholdPercent: threshold_percent ?? settings.default_threshold_percent,
+        minSources: min_sources ?? settings.min_sources,
+        categoryThresholds: effectiveCategoryThresholds,
+        confidenceThresholds,
+        upperOutlierPct: settings.outlier_upper_pct,
+        lowerOutlierPct: settings.outlier_filter_pct,
+        activePlatforms: settings.active_platforms,
+        sourceDecisions: existingProductId ? decisionsByProduct.get(existingProductId) ?? [] : [],
+      })
+    }))
     results.push(...batchResults)
   }
 

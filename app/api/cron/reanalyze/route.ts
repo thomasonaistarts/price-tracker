@@ -5,12 +5,14 @@ import { validateCronRequest } from '@/lib/api-security'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
+import { getSourceDecisions, groupSourceDecisionsByProduct } from '@/lib/source-decisions'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const REFRESH_DAYS = 7
+const RETRY_COOLDOWN_HOURS = 6
 const HOURLY_TARGET = 20
 const CONCURRENT = 5
 
@@ -21,6 +23,9 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now()
   const cutoff = new Date(
     Date.now() - REFRESH_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString()
+  const retryCutoff = new Date(
+    Date.now() - RETRY_COOLDOWN_HOURS * 60 * 60 * 1000,
   ).toISOString()
   const supabase = createAdminClient() as any
 
@@ -34,6 +39,8 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('is_active', true)
       .or(`last_analyzed_at.is.null,last_analyzed_at.lt.${cutoff}`)
+      .or(`last_attempted_at.is.null,last_attempted_at.lt.${retryCutoff}`)
+      .order('last_attempted_at', { ascending: true, nullsFirst: true })
       .order('last_analyzed_at', { ascending: true, nullsFirst: true })
       .limit(HOURLY_TARGET),
   ])
@@ -82,6 +89,15 @@ export async function GET(req: NextRequest) {
     })
   }))
 
+  const decisions = (await Promise.all(userIds.map((userId) =>
+    getSourceDecisions(
+      supabase,
+      userId,
+      products.filter((product: any) => product.user_id === userId).map((product: any) => product.id),
+    ),
+  ))).flat()
+  const decisionsByProduct = groupSourceDecisionsByProduct(decisions)
+
   let processed = 0
   let failed = 0
 
@@ -90,7 +106,10 @@ export async function GET(req: NextRequest) {
     const results = await Promise.allSettled(batch.map((product: any) => {
       const options = optionsByUser.get(product.user_id)
       if (!options) throw new Error('Kullanıcı ayarları yüklenemedi')
-      return analyzeProduct(product, options)
+      return analyzeProduct(product, {
+        ...options,
+        sourceDecisions: decisionsByProduct.get(product.id) ?? [],
+      })
     }))
 
     await Promise.all(results.map(async (settled, resultIndex) => {
@@ -180,6 +199,7 @@ export async function GET(req: NextRequest) {
     daily_capacity: HOURLY_TARGET * 24,
     seven_day_capacity: HOURLY_TARGET * 24 * REFRESH_DAYS,
     refresh_days: REFRESH_DAYS,
+    retry_cooldown_hours: RETRY_COOLDOWN_HOURS,
     elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
     next_run_in: '1 saat',
   })
