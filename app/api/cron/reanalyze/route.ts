@@ -4,6 +4,7 @@ import { analyzeProduct, type AnalysisOptions } from '@/lib/analyzer'
 import { validateCronRequest } from '@/lib/api-security'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getUserSettings } from '@/lib/user-settings'
+import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -94,6 +95,14 @@ export async function GET(req: NextRequest) {
 
     await Promise.all(results.map(async (settled, resultIndex) => {
       if (settled.status === 'rejected') {
+        const product = batch[resultIndex]
+        await recordAnalysisAttempt(supabase, {
+          productId: product.id,
+          userId: product.user_id,
+          status: 'failed',
+          failureReason: 'scraper_error',
+          errorMessage: 'Pazar yeri taraması tamamlanamadı',
+        }).catch(() => undefined)
         failed += 1
         return
       }
@@ -101,6 +110,14 @@ export async function GET(req: NextRequest) {
       const product = batch[resultIndex]
       const result = settled.value
       if (result.technical_failure) {
+        await recordAnalysisAttempt(supabase, {
+          productId: product.id,
+          userId: product.user_id,
+          status: 'failed',
+          failureReason: 'no_sources',
+          errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+          scraperHealth: result.scraper_health,
+        }).catch(() => undefined)
         failed += 1
         return
       }
@@ -141,6 +158,14 @@ export async function GET(req: NextRequest) {
         failed += 1
         return
       }
+
+      await recordAnalysisAttempt(supabase, {
+        productId: product.id,
+        userId: product.user_id,
+        status: 'success',
+        attemptedAt: analyzedAt,
+        scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
 
       processed += 1
     }))

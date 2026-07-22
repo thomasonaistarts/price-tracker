@@ -3,6 +3,7 @@
 
 export type UserRole = 'admin' | 'user'
 export type AlertType = 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
+export type AnalysisAttemptStatus = 'success' | 'failed'
 
 export interface Database {
   public: {
@@ -65,6 +66,20 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['price_analyses']['Row'], 'id'>
         Update: Partial<Database['public']['Tables']['price_analyses']['Insert']>
       }
+      analysis_attempts: {
+        Row: {
+          id: string
+          product_id: string
+          user_id: string
+          status: AnalysisAttemptStatus
+          failure_reason: string | null
+          error_message: string | null
+          scraper_health: Json
+          attempted_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['analysis_attempts']['Row'], 'id'>
+        Update: never
+      }
       category_thresholds: {
         Row: {
           id: string
@@ -94,6 +109,7 @@ export type User = Database['public']['Tables']['users']['Row']
 export type Product = Database['public']['Tables']['products']['Row']
 export type PriceAnalysis = Database['public']['Tables']['price_analyses']['Row']
 export type CategoryThreshold = Database['public']['Tables']['category_thresholds']['Row']
+export type AnalysisAttempt = Database['public']['Tables']['analysis_attempts']['Row']
 
 // Kullanıcı ayarları — JSONB içeriği
 export interface UserSettings {

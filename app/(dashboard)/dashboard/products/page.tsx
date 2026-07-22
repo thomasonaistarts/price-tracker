@@ -7,7 +7,7 @@ export default async function ProductsPage() {
   const user = await requireAuth()
   const supabase = await createClient()
 
-  const [{ data: products }, { data: analyses }] = await Promise.all([
+  const [{ data: products }, { data: analyses }, { data: attempts }] = await Promise.all([
     supabase
       .from('products')
       .select('*')
@@ -18,12 +18,25 @@ export default async function ProductsPage() {
       .select('product_id, run_at, alert, alert_reason, price_diff_percent, market_mean, min_price, max_price, sources_count, sources')
       .eq('user_id', user.id)
       .order('run_at', { ascending: false }),
+    supabase
+      .from('analysis_attempts')
+      .select('product_id, attempted_at, status, failure_reason, error_message')
+      .eq('user_id', user.id)
+      .order('attempted_at', { ascending: false })
+      .limit(5000),
   ])
 
   // Her ürün için sadece en son analizi tut
   const latestMap = new Map<string, any>()
   for (const a of (analyses ?? []) as any[]) {
     if (a && !latestMap.has(a.product_id)) latestMap.set(a.product_id, a)
+  }
+
+  const latestAttemptMap = new Map<string, any>()
+  for (const attempt of (attempts ?? []) as any[]) {
+    if (attempt && !latestAttemptMap.has(attempt.product_id)) {
+      latestAttemptMap.set(attempt.product_id, attempt)
+    }
   }
 
   return (
@@ -43,6 +56,7 @@ export default async function ProductsPage() {
       <ProductsClient
         products={(products ?? []) as Product[]}
         latestAnalyses={Array.from(latestMap.values()) as any}
+        latestAttempts={Array.from(latestAttemptMap.values()) as any}
       />
     </div>
   )

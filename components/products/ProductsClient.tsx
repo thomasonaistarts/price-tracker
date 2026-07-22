@@ -104,9 +104,18 @@ function ProductSourceGroups({ sources, fmt }: { sources: Source[]; fmt: (n: num
   )
 }
 
+interface LatestAttempt {
+  product_id: string
+  attempted_at: string
+  status: 'success' | 'failed'
+  failure_reason: string | null
+  error_message: string | null
+}
+
 interface Props {
   products: Product[]
   latestAnalyses: LatestAnalysis[]
+  latestAttempts: LatestAttempt[]
 }
 
 function alertBadge(alert: string) {
@@ -120,7 +129,7 @@ type DiffOp = '' | 'lt' | 'lte' | 'eq' | 'gte' | 'gt'
 type AlertKey = 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
 type ConfKey = 'exact' | 'high' | 'medium' | 'low'
 
-export default function ProductsClient({ products, latestAnalyses }: Props) {
+export default function ProductsClient({ products, latestAnalyses, latestAttempts }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
@@ -139,6 +148,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
   const [diffVal, setDiffVal] = useState('')
 
   const analysisMap = Object.fromEntries(latestAnalyses.map(a => [a.product_id, a]))
+  const attemptMap = Object.fromEntries(latestAttempts.map(a => [a.product_id, a]))
 
   const categories = Array.from(
     new Set(localProducts.map(p => p.category).filter(Boolean) as string[])
@@ -233,6 +243,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
             ? `Bu ürün kısa süre önce analiz edildi. Yaklaşık ${retryMinutes} dakika sonra tekrar deneyin.`
             : data?.error ?? 'Analiz başlatılamadı. Lütfen tekrar deneyin.',
         })
+        if (data?.attempted_at) router.refresh()
         return
       }
       router.refresh()
@@ -451,6 +462,10 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                     ? Math.floor((Date.now() - new Date(analysis.run_at).getTime()) / (24 * 60 * 60 * 1000))
                     : null
                   const isStale = analysisAgeDays != null && analysisAgeDays >= 7
+                  const latestAttempt: LatestAttempt | undefined = attemptMap[p.id]
+                  const persistedFailure = latestAttempt?.status === 'failed' && (
+                    !analysis || new Date(latestAttempt.attempted_at).getTime() > new Date(analysis.run_at).getTime()
+                  )
                   return (
                     <Fragment key={p.id}>
                       <tr
@@ -518,7 +533,7 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                           {analysis ? (
                             <div className="flex flex-col items-center gap-0.5">
                               <span className={isStale ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                                {isStale ? 'Güncel değil' : 'Güncel'}
+                                {isStale ? 'Son başarılı · eski' : 'Son başarılı'}
                                 {analysisAgeDays != null && analysisAgeDays > 0 ? ` · ${analysisAgeDays} gün` : ''}
                               </span>
                               <span>
@@ -526,7 +541,16 @@ export default function ProductsClient({ products, latestAnalyses }: Props) {
                                 <span className="text-gray-300 dark:text-slate-600">{new Date(analysis.run_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
                               </span>
                             </div>
-                          ) : '—'}
+                          ) : <span>Başarılı analiz yok</span>}
+                          {persistedFailure && latestAttempt && (
+                            <div
+                              className="mt-1 flex flex-col items-center text-red-600 dark:text-red-400"
+                              title={latestAttempt.error_message ?? 'Pazar yeri taraması tamamlanamadı'}
+                            >
+                              <span>Son deneme başarısız</span>
+                              <span>{new Date(latestAttempt.attempted_at).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">

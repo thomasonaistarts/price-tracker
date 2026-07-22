@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
+import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 
 export const maxDuration = 300
 
@@ -64,10 +65,26 @@ export async function POST(
   })
 
   if (result.technical_failure) {
+    const attemptedAt = new Date().toISOString()
+    try {
+      await recordAnalysisAttempt(supabase, {
+        productId: product.id,
+        userId,
+        status: 'failed',
+        attemptedAt,
+        failureReason: 'no_sources',
+        errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+        scraperHealth: result.scraper_health,
+      })
+    } catch {
+      return NextResponse.json({ error: 'Başarısız analiz denemesi kaydedilemedi' }, { status: 500 })
+    }
+
     return NextResponse.json(
       {
-        error: 'Pazar yeri taraması zaman aşımına uğradı. Eski analiz korundu; lütfen tekrar deneyin.',
+        error: 'Pazar yerlerinden fiyat alınamadı. Eski başarılı analiz korundu; lütfen tekrar deneyin.',
         retryable: true,
+        attempted_at: attemptedAt,
       },
       { status: 503 },
     )
@@ -106,6 +123,14 @@ export async function POST(
   if (updateError) {
     return NextResponse.json({ error: 'Analiz zamanı güncellenemedi' }, { status: 500 })
   }
+
+  await recordAnalysisAttempt(supabase, {
+    productId: product.id,
+    userId,
+    status: 'success',
+    attemptedAt: now,
+    scraperHealth: result.scraper_health,
+  }).catch(() => undefined)
 
   return NextResponse.json({ success: true, alert: result.alert, price_diff_percent: result.price_diff_percent })
 }

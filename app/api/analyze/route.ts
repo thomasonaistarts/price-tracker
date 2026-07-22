@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import { analyzeSchema } from '@/lib/validations'
 import { runAnalysis } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
+import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 
 // Vercel Pro: 300s max — ScraperAPI premium+render ~30s/ürün
 export const maxDuration = 300
@@ -97,6 +98,27 @@ export async function POST(req: NextRequest) {
 
   const now = new Date().toISOString()
 
+  for (const result of results.filter((item) => item.technical_failure)) {
+    const { data: existingProduct } = await supabase
+      .from('products')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('sku', result.sku)
+      .maybeSingle()
+
+    if (existingProduct) {
+      await recordAnalysisAttempt(supabase, {
+        productId: existingProduct.id,
+        userId,
+        status: 'failed',
+        attemptedAt: now,
+        failureReason: 'no_sources',
+        errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+        scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
+    }
+  }
+
   for (const result of completedResults) {
     const { data: product, error: productError } = await supabase
       .from('products')
@@ -115,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     if (productError || !product) continue
 
-    await supabase.from('price_analyses').insert({
+    const { error: analysisError } = await supabase.from('price_analyses').insert({
       product_id: product.id,
       user_id: userId,
       run_at: now,
@@ -135,6 +157,16 @@ export async function POST(req: NextRequest) {
       follow_up: result.follow_up,
       scraper_health: result.scraper_health,
     })
+
+    if (!analysisError) {
+      await recordAnalysisAttempt(supabase, {
+        productId: product.id,
+        userId,
+        status: 'success',
+        attemptedAt: now,
+        scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
+    }
   }
 
   const alertCount = completedResults.filter(

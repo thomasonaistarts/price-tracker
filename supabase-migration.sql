@@ -74,6 +74,21 @@ create table public.price_analyses (
 );
 
 -- -----------------------------------------------
+-- analysis_attempts tablosu
+-- Başarılı ve başarısız her tarama denemesinin kalıcı günlüğü
+-- -----------------------------------------------
+create table public.analysis_attempts (
+  id              uuid primary key default uuid_generate_v4(),
+  product_id      uuid not null references public.products(id) on delete cascade,
+  user_id         uuid not null references public.users(id) on delete cascade,
+  status          text not null check (status in ('success', 'failed')),
+  failure_reason  text,
+  error_message   text,
+  scraper_health  jsonb not null default '[]',
+  attempted_at    timestamptz not null default now()
+);
+
+-- -----------------------------------------------
 -- category_thresholds tablosu
 -- Kullanıcı başına kategori eşikleri
 -- -----------------------------------------------
@@ -168,6 +183,7 @@ grant execute on function public.is_admin() to authenticated;
 alter table public.users enable row level security;
 alter table public.products enable row level security;
 alter table public.price_analyses enable row level security;
+alter table public.analysis_attempts enable row level security;
 alter table public.category_thresholds enable row level security;
 
 -- users: admin herkesi görür, user sadece kendini
@@ -193,6 +209,11 @@ create policy "analyses_select" on public.price_analyses for select using (
 );
 create policy "analyses_insert" on public.price_analyses for insert with check (user_id = auth.uid());
 
+create policy "analysis_attempts_select" on public.analysis_attempts for select using (
+  user_id = auth.uid() or public.is_admin()
+);
+create policy "analysis_attempts_insert" on public.analysis_attempts for insert with check (user_id = auth.uid());
+
 -- category_thresholds: kendi eşiklerini yönetir
 create policy "thresholds_all" on public.category_thresholds for all using (user_id = auth.uid());
 
@@ -206,6 +227,8 @@ create index idx_analyses_product_id on public.price_analyses(product_id);
 create index idx_analyses_user_id on public.price_analyses(user_id);
 create index idx_analyses_run_at on public.price_analyses(run_at desc);
 create index idx_analyses_alert on public.price_analyses(alert);
+create index idx_analysis_attempts_product_time on public.analysis_attempts(product_id, attempted_at desc);
+create index idx_analysis_attempts_user_time on public.analysis_attempts(user_id, attempted_at desc);
 create index idx_thresholds_user_id on public.category_thresholds(user_id);
 
 -- -----------------------------------------------
