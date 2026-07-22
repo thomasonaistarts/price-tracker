@@ -18,7 +18,7 @@ export default async function ProductsPage() {
       .range(from, to)),
     fetchAllRows<any>(async (from, to) => supabase
       .from('latest_price_analyses')
-      .select('product_id, run_at, alert, alert_reason, price_diff_percent, market_mean, min_price, max_price, sources_count, sources')
+      .select('product_id, run_at, alert, alert_reason, price_diff_percent, market_mean, min_price, max_price, sources_count, sources, notes')
       .eq('user_id', user.id)
       .order('run_at', { ascending: false })
       .range(from, to)),

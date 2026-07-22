@@ -59,6 +59,7 @@ create table public.price_analyses (
   id                  uuid primary key default uuid_generate_v4(),
   product_id          uuid not null references public.products(id) on delete cascade,
   user_id             uuid not null references public.users(id) on delete cascade,
+  our_price            numeric(12, 2) not null,
   market_mean         numeric(12, 2),
   market_median       numeric(12, 2),
   market_std          numeric(12, 2),
@@ -267,6 +268,7 @@ create index idx_products_sku on public.products(user_id, sku);
 create index idx_products_refresh_queue on public.products(is_active, last_analyzed_at);
 create index idx_products_analysis_queue on public.products(is_active, last_attempted_at, last_analyzed_at);
 create index idx_analyses_product_id on public.price_analyses(product_id);
+create index idx_price_analyses_product_history on public.price_analyses(user_id, product_id, run_at desc);
 create index idx_analyses_user_id on public.price_analyses(user_id);
 create index idx_analyses_run_at on public.price_analyses(run_at desc);
 create index idx_analyses_alert on public.price_analyses(alert);

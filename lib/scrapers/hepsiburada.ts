@@ -1,5 +1,6 @@
 import type { ScrapedPrice } from './types'
 import { assertScraperResponse, proxiedUrl, ScraperProxyError } from './proxy'
+import { extractGenericCommerceMetadata } from './metadata'
 
 const HEADERS_HTML = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -51,6 +52,7 @@ async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
           price,
           url: sku ? `https://www.hepsiburada.com/${sku}-pm-${sku}` : `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
           currency: 'TRY',
+          ...extractGenericCommerceMetadata(item, price),
         }]
       })
     } catch (error) {
@@ -91,6 +93,7 @@ function extractEmbeddedState(html: string, query: string): ScrapedPrice[] {
           price,
           url: item?.url ?? `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
           currency: 'TRY',
+          ...extractGenericCommerceMetadata(item, price),
         }]
       })
     } catch { }
@@ -162,7 +165,14 @@ export async function scrapeHepsiburada(query: string): Promise<ScrapedPrice[]> 
           return items.slice(0, 8).flatMap((item): ScrapedPrice[] => {
             const price = Number(item?.price ?? item?.salePrice ?? 0)
             if (price <= 0) return []
-            return [{ site: 'Hepsiburada', product_name: item?.name ?? query, price, url: `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`, currency: 'TRY' }]
+            return [{
+              site: 'Hepsiburada',
+              product_name: item?.name ?? query,
+              price,
+              url: `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
+              currency: 'TRY',
+              ...extractGenericCommerceMetadata(item, price),
+            }]
           })
         }
       } catch { }

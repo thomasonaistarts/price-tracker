@@ -51,6 +51,7 @@ export interface Database {
           id: string
           product_id: string
           user_id: string
+          our_price: number | null
           market_mean: number | null
           market_median: number | null
           market_std: number | null

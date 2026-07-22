@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
+import ProductPriceHistory from '@/components/products/ProductPriceHistory'
 import { downloadExcel } from '@/lib/exportExcel'
 import { sourceDecisionKey, type SourceDecisionRule, type SourceDecisionValue } from '@/lib/source-decisions'
 
@@ -17,6 +18,12 @@ interface Source {
   quantityRatio?: number
   product_name?: string
   manualDecision?: 'approved'
+  seller?: string
+  originalPrice?: number
+  inStock?: boolean
+  shipping?: string[]
+  campaigns?: string[]
+  officialSeller?: boolean
 }
 interface LatestAnalysis {
   product_id: string
@@ -29,6 +36,7 @@ interface LatestAnalysis {
   max_price: number | null
   sources_count: number
   sources: Source[]
+  notes: string[] | null
 }
 
 const CONF_GROUPS = [
@@ -120,6 +128,9 @@ function ProductSourceGroups({
                     <PlatformLogo name={source.site} size={14} />
                     <span className="font-medium text-gray-700 dark:text-slate-200">{source.site}</span>
                     <span className="font-semibold text-blue-600 dark:text-blue-400">{fmt(source.price)}</span>
+                    {source.originalPrice != null && source.originalPrice > source.price && (
+                      <span className="text-[10px] text-gray-400 line-through dark:text-slate-500">{fmt(source.originalPrice)}</span>
+                    )}
                     {source.unitPrice != null && source.unitPriceLabel && (
                       <span className="text-gray-400 dark:text-slate-500" title={`Oran: ${source.quantityRatio?.toFixed(2)}x`}>
                         ≈{source.unitPrice.toFixed(1)}&nbsp;{source.unitPriceLabel}
@@ -130,6 +141,29 @@ function ProductSourceGroups({
                     <p className="mt-1 truncate text-[11px] text-gray-400 dark:text-slate-500" title={source.product_name}>
                       {source.product_name}
                     </p>
+                  )}
+                  {(source.inStock != null || source.seller || source.officialSeller || (source.shipping?.length ?? 0) > 0 || (source.campaigns?.length ?? 0) > 0) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      {source.inStock != null && (
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${source.inStock ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                          {source.inStock ? 'Stokta' : 'Tükendi'}
+                        </span>
+                      )}
+                      {source.officialSeller && (
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Resmî satıcı</span>
+                      )}
+                      {source.seller && (
+                        <span className="max-w-[150px] truncate rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-slate-600 dark:text-slate-300" title={source.seller}>
+                          Satıcı: {source.seller}
+                        </span>
+                      )}
+                      {source.shipping?.slice(0, 2).map((label) => (
+                        <span key={label} className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300">{label}</span>
+                      ))}
+                      {source.campaigns?.slice(0, 2).map((label) => (
+                        <span key={label} className="max-w-[180px] truncate rounded bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" title={label}>{label}</span>
+                      ))}
+                    </div>
                   )}
                   <div className="mt-2 flex items-center gap-1.5 border-t border-gray-100 pt-2 dark:border-slate-600">
                     {savedDecision ? (
@@ -729,21 +763,31 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && sources.length > 0 && (
+                      {isExpanded && analysis && (
                         <tr key={`${p.id}-detail`} className="bg-blue-50 dark:bg-blue-900/20">
                           <td colSpan={10} className="px-6 py-4">
-                            <ProductSourceGroups
-                              productId={p.id}
-                              sources={sources}
-                              fmt={fmt}
-                              decisionMap={decisionMap}
-                              savingKey={decisionSavingKey}
-                              onDecision={handleSourceDecision}
-                              onClear={handleClearSourceDecision}
-                            />
-                            {analysis?.alert_reason && (
-                              <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">{analysis.alert_reason}</p>
+                            {sources.length > 0 && (
+                              <ProductSourceGroups
+                                productId={p.id}
+                                sources={sources}
+                                fmt={fmt}
+                                decisionMap={decisionMap}
+                                savingKey={decisionSavingKey}
+                                onDecision={handleSourceDecision}
+                                onClear={handleClearSourceDecision}
+                              />
                             )}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {analysis?.alert_reason && (
+                                <p className="text-xs text-gray-500 dark:text-slate-400">{analysis.alert_reason}</p>
+                              )}
+                              {analysis?.notes?.includes('Arama stratejisi: barkod') && (
+                                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                  Barkodla arandı
+                                </span>
+                              )}
+                            </div>
+                            <ProductPriceHistory productId={p.id} />
                           </td>
                         </tr>
                       )}

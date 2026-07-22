@@ -100,6 +100,7 @@ export async function POST(
     product_id: product.id,
     user_id: userId,
     run_at: now,
+    our_price: result.our_price,
     market_mean: result.market_mean,
     market_median: result.market_median,
     market_std: result.market_std,

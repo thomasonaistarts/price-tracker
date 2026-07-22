@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
         product_id: product.id,
         user_id: product.user_id,
         run_at: analyzedAt,
+        our_price: result.our_price,
         market_mean: result.market_mean,
         market_median: result.market_median,
         market_std: result.market_std,

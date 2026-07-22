@@ -1,4 +1,5 @@
 import type { ScrapedPrice } from './types'
+import { extractTrendyolMetadata } from './metadata'
 
 // Apify "Trendyol Scraper | All-In-One" — fatihtahta/trendyol-scraper
 // Actor ID: AoPP8ru9uKws5t80G
@@ -64,6 +65,7 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
         price,
         url: productUrl.startsWith('http') ? productUrl : `https://www.trendyol.com${productUrl}`,
         currency: 'TRY',
+        ...extractTrendyolMetadata(p, price),
       }]
     })
   } catch (error) {

@@ -1,6 +1,7 @@
 import type { ProductInput } from '@/lib/validations'
 import { scrapeAllPlatforms, type ScrapedPrice, type ConfidenceThresholds, type PlatformScrapeHealth, DEFAULT_CONFIDENCE_THRESHOLDS } from '@/lib/scrapers'
 import type { SourceDecisionRule } from '@/lib/source-decisions'
+import { chooseProductSearchQuery, searchStrategyNote } from '@/lib/product-identity'
 
 export type { ScrapedPrice }
 
@@ -58,12 +59,15 @@ export async function analyzeProduct(
   const thresholdPercent = options.categoryThresholds?.[category] ?? options.thresholdPercent
   const minSources = options.minSources
   const upperOutlierPct = options.upperOutlierPct ?? 250
+  const search = chooseProductSearchQuery(sku, product_name)
+  const searchNote = searchStrategyNote(search.strategy)
 
   // Gerçek rakip fiyatları scrape et
   let scraperHealth: PlatformScrapeHealth[] = []
   const sources = await scrapeAllPlatforms(product_name, {
     thresholds: options.confidenceThresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS,
     activePlatforms: options.activePlatforms,
+    searchQuery: search.query,
     lowerOutlierPct: options.lowerOutlierPct,
     sourceDecisions: options.sourceDecisions,
     onHealth: (health) => { scraperHealth = health },
@@ -92,9 +96,10 @@ export async function analyzeProduct(
       confidence: 0.2,
       scraper_health: scraperHealth,
       technical_failure: technicalFailure,
-      notes: sources.length === 0
-        ? ['Scraper sonuç döndürmedi — ürün adını kontrol edin veya daha sonra tekrar deneyin']
-        : [`IQR filtreleme sonrası ${filtered.length} kaynak kaldı`],
+      notes: [
+        searchNote,
+        ...(sources.length === 0 ? ['Scraper sonuç döndürmedi — ürün adını kontrol edin veya daha sonra tekrar deneyin'] : [`IQR filtreleme sonrası ${filtered.length} kaynak kaldı`]),
+      ],
     }
   }
 
@@ -121,6 +126,7 @@ export async function analyzeProduct(
       scraper_health: scraperHealth,
       technical_failure: false,
       notes: [
+        searchNote,
         `Bizim fiyatımız (₺${our_price}) piyasa ortalamasının (₺${mean}) %${diff.toFixed(0)} üzerinde.`,
         `Bu oran %${upperOutlierPct} eşiğini aştığı için sonuçlar güvenilir sayılmıyor — eşleşen ürünler farklı olabilir.`,
       ],
@@ -157,6 +163,7 @@ export async function analyzeProduct(
     scraper_health: scraperHealth,
     technical_failure: false,
     notes: [
+      searchNote,
       `${sources.length} fiyat kaynağı bulundu (${(options.activePlatforms ?? ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol']).join(', ')})`,
     ],
   }

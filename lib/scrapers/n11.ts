@@ -1,5 +1,6 @@
 import type { ScrapedPrice } from './types'
 import { assertScraperResponse, proxiedUrl } from './proxy'
+import { extractSchemaOfferMetadata } from './metadata'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -26,7 +27,14 @@ function parseN11Html(html: string, query: string): ScrapedPrice[] {
             ? parseFloat(rawPrice.replace(/\./g, '').replace(',', '.'))
             : Number(rawPrice)
           if (price > 0) {
-            results.push({ site: 'N11', product_name: item.name ?? '', price, url: item.url ?? searchUrl, currency: 'TRY' })
+            results.push({
+              site: 'N11',
+              product_name: item.name ?? '',
+              price,
+              url: item.url ?? searchUrl,
+              currency: 'TRY',
+              ...extractSchemaOfferMetadata(item.offers, price),
+            })
           }
         }
       }

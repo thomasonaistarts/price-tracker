@@ -16,6 +16,7 @@ export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
 export interface ScrapeOptions {
   thresholds?: ConfidenceThresholds
   activePlatforms?: string[]
+  searchQuery?: string
   lowerOutlierPct?: number
   sourceDecisions?: SourceDecisionRule[]
   onHealth?: (health: PlatformScrapeHealth[]) => void
@@ -87,13 +88,14 @@ export async function scrapeAllPlatforms(
   options: ScrapeOptions = {},
 ): Promise<ScrapedPrice[]> {
   const thresholds = options.thresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS
+  const searchQuery = options.searchQuery?.trim() || query
   const active = new Set(options.activePlatforms ?? SUPPORTED_PLATFORMS)
   const jobs: Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }>[] = []
-  if (active.has('Hepsiburada')) jobs.push(runScraper('Hepsiburada', () => scrapeHepsiburada(query), TIMEOUT.hepsiburada))
-  if (active.has('N11')) jobs.push(runScraper('N11', () => scrapeN11(query), TIMEOUT.n11))
-  if (active.has('PTTAvm')) jobs.push(runScraper('PTTAvm', () => scrapePttavm(query), TIMEOUT.pttavm))
-  if (active.has('İdefix')) jobs.push(runScraper('İdefix', () => scrapeIdefix(query), TIMEOUT.idefix))
-  if (active.has('Trendyol')) jobs.push(runScraper('Trendyol', () => scrapeTrendyol(query), TIMEOUT.trendyol))
+  if (active.has('Hepsiburada')) jobs.push(runScraper('Hepsiburada', () => scrapeHepsiburada(searchQuery), TIMEOUT.hepsiburada))
+  if (active.has('N11')) jobs.push(runScraper('N11', () => scrapeN11(searchQuery), TIMEOUT.n11))
+  if (active.has('PTTAvm')) jobs.push(runScraper('PTTAvm', () => scrapePttavm(searchQuery), TIMEOUT.pttavm))
+  if (active.has('İdefix')) jobs.push(runScraper('İdefix', () => scrapeIdefix(searchQuery), TIMEOUT.idefix))
+  if (active.has('Trendyol')) jobs.push(runScraper('Trendyol', () => scrapeTrendyol(searchQuery), TIMEOUT.trendyol))
 
   const platformResults = await Promise.all(jobs)
   options.onHealth?.(platformResults.map((result) => result.health))

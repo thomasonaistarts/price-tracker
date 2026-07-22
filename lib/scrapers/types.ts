@@ -1,4 +1,13 @@
-export interface ScrapedPrice {
+export interface SourceCommerceMetadata {
+  seller?: string
+  originalPrice?: number
+  inStock?: boolean
+  shipping?: string[]
+  campaigns?: string[]
+  officialSeller?: boolean
+}
+
+export interface ScrapedPrice extends SourceCommerceMetadata {
   site: string
   product_name: string
   price: number
