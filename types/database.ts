@@ -33,6 +33,14 @@ export interface Database {
           brand: string | null
           category: string | null
           our_price: number
+          purchase_cost: number | null
+          vat_rate: number
+          commission_rate: number
+          shipping_cost: number
+          packaging_cost: number
+          target_margin_rate: number
+          price_floor: number | null
+          price_ceiling: number | null
           currency: string
           is_active: boolean
           created_at: string
@@ -71,6 +79,21 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['price_analyses']['Row'], 'id'>
         Update: Partial<Database['public']['Tables']['price_analyses']['Insert']>
+      }
+      product_price_changes: {
+        Row: {
+          id: string
+          product_id: string
+          user_id: string
+          old_price: number
+          new_price: number
+          change_source: 'manual' | 'recommendation'
+          reason: string | null
+          recommendation_snapshot: Json
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['product_price_changes']['Row'], 'id' | 'created_at'>
+        Update: never
       }
       analysis_attempts: {
         Row: {
@@ -131,6 +154,7 @@ export type Product = Database['public']['Tables']['products']['Row']
 export type PriceAnalysis = Database['public']['Tables']['price_analyses']['Row']
 export type CategoryThreshold = Database['public']['Tables']['category_thresholds']['Row']
 export type AnalysisAttempt = Database['public']['Tables']['analysis_attempts']['Row']
+export type ProductPriceChange = Database['public']['Tables']['product_price_changes']['Row']
 export type SourceMatchDecision = Database['public']['Tables']['source_match_decisions']['Row']
 
 // Kullanıcı ayarları — JSONB içeriği

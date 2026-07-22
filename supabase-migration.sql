@@ -39,7 +39,17 @@ create table public.products (
   brand         text,
   category      text,
   our_price     numeric(12, 2) not null,
+  purchase_cost numeric(12, 2) check (purchase_cost is null or purchase_cost >= 0),
+  vat_rate      numeric(5, 2) not null default 20 check (vat_rate between 0 and 100),
+  commission_rate numeric(5, 2) not null default 0 check (commission_rate between 0 and 100),
+  shipping_cost numeric(12, 2) not null default 0 check (shipping_cost >= 0),
+  packaging_cost numeric(12, 2) not null default 0 check (packaging_cost >= 0),
+  target_margin_rate numeric(5, 2) not null default 20 check (target_margin_rate between 0 and 100),
+  price_floor   numeric(12, 2) check (price_floor is null or price_floor > 0),
+  price_ceiling numeric(12, 2) check (price_ceiling is null or price_ceiling > 0),
   currency      text not null default 'TRY',
+  check (commission_rate + target_margin_rate < 100),
+  check (price_floor is null or price_ceiling is null or price_ceiling >= price_floor),
   is_active     boolean not null default true,
   last_analyzed_at timestamptz,
   last_attempted_at timestamptz,
@@ -108,6 +118,22 @@ create table public.source_match_decisions (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
   unique(product_id, platform, source_url)
+);
+
+-- -----------------------------------------------
+-- product_price_changes tablosu
+-- Manuel ve öneri kaynaklı fiyat değişikliklerinin denetim günlüğü
+-- -----------------------------------------------
+create table public.product_price_changes (
+  id                      uuid primary key default uuid_generate_v4(),
+  product_id              uuid not null references public.products(id) on delete cascade,
+  user_id                 uuid not null references public.users(id) on delete cascade,
+  old_price               numeric(12, 2) not null check (old_price > 0),
+  new_price               numeric(12, 2) not null check (new_price > 0),
+  change_source           text not null check (change_source in ('manual', 'recommendation')),
+  reason                  text,
+  recommendation_snapshot jsonb not null default '{}',
+  created_at              timestamptz not null default now()
 );
 
 create view public.latest_price_analyses
@@ -220,6 +246,7 @@ alter table public.products enable row level security;
 alter table public.price_analyses enable row level security;
 alter table public.analysis_attempts enable row level security;
 alter table public.source_match_decisions enable row level security;
+alter table public.product_price_changes enable row level security;
 alter table public.category_thresholds enable row level security;
 
 -- users: admin herkesi görür, user sadece kendini
@@ -257,8 +284,61 @@ create policy "source_match_decisions_insert" on public.source_match_decisions f
 create policy "source_match_decisions_update" on public.source_match_decisions for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "source_match_decisions_delete" on public.source_match_decisions for delete using (user_id = auth.uid());
 
+create policy "product_price_changes_select" on public.product_price_changes
+  for select using (user_id = auth.uid() or public.is_admin());
+create policy "product_price_changes_insert" on public.product_price_changes
+  for insert with check (user_id = auth.uid());
+
 -- category_thresholds: kendi eşiklerini yönetir
 create policy "thresholds_all" on public.category_thresholds for all using (user_id = auth.uid());
+
+-- -----------------------------------------------
+-- Atomik fiyat güncelleme ve denetim kaydı
+-- -----------------------------------------------
+create or replace function public.apply_product_price_change(
+  p_product_id uuid,
+  p_expected_old_price numeric,
+  p_new_price numeric,
+  p_change_source text,
+  p_reason text default null,
+  p_snapshot jsonb default '{}'
+)
+returns public.product_price_changes
+language plpgsql
+security invoker
+set search_path = public
+as $
+declare
+  changed public.product_price_changes;
+begin
+  if p_new_price is null or p_new_price <= 0 then
+    raise exception 'invalid_new_price';
+  end if;
+  if p_change_source not in ('manual', 'recommendation') then
+    raise exception 'invalid_change_source';
+  end if;
+
+  update public.products
+  set our_price = round(p_new_price, 2), updated_at = now()
+  where id = p_product_id
+    and user_id = auth.uid()
+    and abs(our_price - p_expected_old_price) < 0.01;
+
+  if not found then
+    raise exception 'price_changed_or_product_missing';
+  end if;
+
+  insert into public.product_price_changes (
+    product_id, user_id, old_price, new_price, change_source, reason, recommendation_snapshot
+  ) values (
+    p_product_id, auth.uid(), round(p_expected_old_price, 2), round(p_new_price, 2),
+    p_change_source, p_reason, coalesce(p_snapshot, '{}')
+  ) returning * into changed;
+  return changed;
+end;
+$;
+
+grant execute on function public.apply_product_price_change(uuid, numeric, numeric, text, text, jsonb) to authenticated;
 
 -- -----------------------------------------------
 -- Indexes
@@ -275,6 +355,7 @@ create index idx_analyses_alert on public.price_analyses(alert);
 create index idx_analysis_attempts_product_time on public.analysis_attempts(product_id, attempted_at desc);
 create index idx_analysis_attempts_user_time on public.analysis_attempts(user_id, attempted_at desc);
 create index idx_source_match_decisions_user_product on public.source_match_decisions(user_id, product_id);
+create index idx_product_price_changes_product_time on public.product_price_changes(product_id, created_at desc);
 create index idx_thresholds_user_id on public.category_thresholds(user_id);
 
 -- -----------------------------------------------

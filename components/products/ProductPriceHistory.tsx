@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { buildPriceChangeEvents, type PriceHistoryPoint } from '@/lib/price-history'
+import { buildPriceChangeEvents, buildPriceChartPoints, type PriceHistoryPoint, type RecordedPriceChange } from '@/lib/price-history'
 
 const DAY_OPTIONS = [30, 90, 365] as const
 
@@ -24,6 +24,7 @@ function compactPrice(value: number) {
 export default function ProductPriceHistory({ productId }: { productId: string }) {
   const [days, setDays] = useState<(typeof DAY_OPTIONS)[number]>(90)
   const [history, setHistory] = useState<PriceHistoryPoint[]>([])
+  const [priceChanges, setPriceChanges] = useState<RecordedPriceChange[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -37,6 +38,7 @@ export default function ProductPriceHistory({ productId }: { productId: string }
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error ?? 'Fiyat geçmişi yüklenemedi')
         setHistory(payload.history ?? [])
+        setPriceChanges(payload.priceChanges ?? [])
       })
       .catch((requestError) => {
         if (requestError instanceof DOMException && requestError.name === 'AbortError') return
@@ -49,12 +51,12 @@ export default function ProductPriceHistory({ productId }: { productId: string }
     return () => controller.abort()
   }, [days, productId])
 
-  const chartData = useMemo(() => history.map((point) => ({
+  const chartData = useMemo(() => buildPriceChartPoints(history, priceChanges).map((point) => ({
     ...point,
     dateLabel: new Date(point.run_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' }),
-  })), [history])
-  const events = useMemo(() => buildPriceChangeEvents(history).slice(0, 8), [history])
-  const hasOurPriceSnapshots = history.some((point) => point.our_price != null)
+  })), [history, priceChanges])
+  const events = useMemo(() => buildPriceChangeEvents(history, priceChanges).slice(0, 8), [history, priceChanges])
+  const hasOurPriceSnapshots = chartData.some((point) => point.our_price != null)
 
   return (
     <section className="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/70">
@@ -85,7 +87,7 @@ export default function ProductPriceHistory({ productId }: { productId: string }
         <div className="flex h-56 items-center justify-center text-xs text-gray-400 dark:text-slate-500">Geçmiş yükleniyor…</div>
       ) : error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{error}</div>
-      ) : history.length === 0 ? (
+      ) : history.length === 0 && priceChanges.length === 0 ? (
         <div className="flex h-44 items-center justify-center text-center text-xs text-gray-400 dark:text-slate-500">
           Bu dönem için başarılı analiz kaydı bulunmuyor.
         </div>

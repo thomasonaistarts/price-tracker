@@ -16,6 +16,15 @@ export interface PriceHistoryPoint {
   sources: PriceHistorySource[] | null
 }
 
+export interface RecordedPriceChange {
+  id: string
+  created_at: string
+  old_price: number
+  new_price: number
+  change_source: 'manual' | 'recommendation'
+  reason: string | null
+}
+
 export interface PriceChangeEvent {
   at: string
   actor: string
@@ -56,7 +65,7 @@ function createEvent(
   }
 }
 
-export function buildPriceChangeEvents(points: PriceHistoryPoint[]): PriceChangeEvent[] {
+export function buildPriceChangeEvents(points: PriceHistoryPoint[], recordedChanges: RecordedPriceChange[] = []): PriceChangeEvent[] {
   const ordered = [...points].sort((a, b) => a.run_at.localeCompare(b.run_at))
   const events: PriceChangeEvent[] = []
 
@@ -84,5 +93,33 @@ export function buildPriceChangeEvents(points: PriceHistoryPoint[]): PriceChange
     })
   }
 
-  return events.sort((a, b) => b.at.localeCompare(a.at))
+  const recordedEvents = recordedChanges.map((change): PriceChangeEvent => ({
+    at: change.created_at,
+    actor: change.change_source === 'recommendation' ? 'Bizim fiyat · öneri' : 'Bizim fiyat · manuel',
+    kind: 'our_price',
+    previous: change.old_price,
+    current: change.new_price,
+    percent: Math.round(((change.new_price - change.old_price) / change.old_price) * 10_000) / 100,
+  }))
+  const recordedPairs = new Set(recordedEvents.map(event => event.previous.toFixed(2) + '|' + event.current.toFixed(2)))
+  const withoutDuplicatedSnapshots = events.filter(event =>
+    event.kind !== 'our_price' || !recordedPairs.has(event.previous.toFixed(2) + '|' + event.current.toFixed(2)),
+  )
+
+  return [...withoutDuplicatedSnapshots, ...recordedEvents].sort((a, b) => b.at.localeCompare(a.at))
+}
+
+export function buildPriceChartPoints(points: PriceHistoryPoint[], recordedChanges: RecordedPriceChange[]): PriceHistoryPoint[] {
+  const changes = recordedChanges.map((change): PriceHistoryPoint => ({
+    id: 'change:' + change.id,
+    run_at: change.created_at,
+    our_price: change.new_price,
+    market_mean: null,
+    min_price: null,
+    max_price: null,
+    price_diff_percent: null,
+    sources_count: 0,
+    sources: [],
+  }))
+  return [...points, ...changes].sort((a, b) => a.run_at.localeCompare(b.run_at))
 }

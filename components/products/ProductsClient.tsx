@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
 import ProductPriceHistory from '@/components/products/ProductPriceHistory'
+import ProductProfitability from '@/components/products/ProductProfitability'
 import { downloadExcel } from '@/lib/exportExcel'
 import { sourceDecisionKey, type SourceDecisionRule, type SourceDecisionValue } from '@/lib/source-decisions'
 
@@ -763,7 +764,7 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && analysis && (
+                      {isExpanded && (
                         <tr key={`${p.id}-detail`} className="bg-blue-50 dark:bg-blue-900/20">
                           <td colSpan={10} className="px-6 py-4">
                             {sources.length > 0 && (
@@ -787,7 +788,12 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                                 </span>
                               )}
                             </div>
-                            <ProductPriceHistory productId={p.id} />
+                            <ProductProfitability
+                              product={p}
+                              marketMean={analysis?.market_mean ?? null}
+                              onUpdated={(values) => setLocalProducts(current => current.map(item => item.id === p.id ? { ...item, ...values } : item))}
+                            />
+                            {analysis && <ProductPriceHistory key={p.id + '-' + p.our_price} productId={p.id} />}
                           </td>
                         </tr>
                       )}
