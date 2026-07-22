@@ -68,9 +68,9 @@ export async function analyzeProduct(
 
   const prices = sources.map(s => s.comparisonPrice ?? s.price).filter(p => p > 0)
   const filtered = iqrFilter(prices)
-  const technicalFailure = sources.length === 0 && scraperHealth.some(
-    ({ status }) => status === 'timeout' || status === 'error',
-  )
+  // Sıfır kaynak, platformlar "başarılı" görünse bile geçerli fiyat analizi değildir.
+  // Önceki başarılı sonucu koru ve cron'un daha sonra yeniden denemesine izin ver.
+  const technicalFailure = sources.length === 0
 
   if (filtered.length < minSources) {
     return {
