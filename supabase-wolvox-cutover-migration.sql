@@ -191,7 +191,8 @@ begin
     into v_cleared_barcode_count
   from included_barcodes;
 
-  delete from public.products;
+  delete from public.products
+  where id is not null;
   get diagnostics v_deleted_count = row_count;
 
   with candidates as (

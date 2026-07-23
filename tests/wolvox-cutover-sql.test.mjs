@@ -23,6 +23,7 @@ test('Wolvox cutover validates counts before deleting and inserting', () => {
   assert.ok(liveCountCheck > candidateCheck)
   assert.ok(deleteStatement > liveCountCheck)
   assert.ok(insertStatement > deleteStatement)
+  assert.match(sql, /delete from public\.products\s+where id is not null/i)
   assert.match(sql, /cutover_result_mismatch/i)
 })
 
