@@ -8,6 +8,11 @@ import ProductPriceHistory from '@/components/products/ProductPriceHistory'
 import ProductProfitability from '@/components/products/ProductProfitability'
 import { downloadExcel } from '@/lib/exportExcel'
 import { sourceDecisionKey, type SourceDecisionRule, type SourceDecisionValue } from '@/lib/source-decisions'
+import {
+  isMarketTrackingEligible,
+  MARKET_TRACKING_MIN_PRICE,
+  MARKET_TRACKING_REFRESH_DAYS,
+} from '@/lib/market-tracking'
 
 interface Source {
   site: string
@@ -240,6 +245,7 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [analyzingId, setAnalyzingId] = useState<string | null>(null)
+  const [trackingSavingId, setTrackingSavingId] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<{ id: string; message: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
@@ -433,6 +439,38 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
       setAnalysisError({ id, message: 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.' })
     } finally {
       setAnalyzingId(null)
+    }
+  }
+
+  async function handleTrackingOverride(product: Product, override: boolean | null) {
+    setTrackingSavingId(product.id)
+    setAnalysisError(null)
+    try {
+      const response = await fetch(`/api/products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ market_tracking_override: override }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        setAnalysisError({
+          id: product.id,
+          message: data?.error ?? 'Piyasa takip tercihi kaydedilemedi.',
+        })
+        return
+      }
+      setLocalProducts(current => current.map(item =>
+        item.id === product.id
+          ? { ...item, market_tracking_override: override }
+          : item,
+      ))
+    } catch {
+      setAnalysisError({
+        id: product.id,
+        message: 'Piyasa takip tercihi kaydedilemedi.',
+      })
+    } finally {
+      setTrackingSavingId(null)
     }
   }
 
@@ -657,7 +695,9 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                   const analysisAgeDays = analysis
                     ? Math.floor((Date.now() - new Date(analysis.run_at).getTime()) / (24 * 60 * 60 * 1000))
                     : null
-                  const isStale = analysisAgeDays != null && analysisAgeDays >= 7
+                  const isStale = analysisAgeDays != null && analysisAgeDays >= MARKET_TRACKING_REFRESH_DAYS
+                  const isMarketTracked = isMarketTrackingEligible(p)
+                  const hasManualTrackingChoice = typeof p.market_tracking_override === 'boolean'
                   const persistedFailure = hasLatestFailure(p)
                   return (
                     <Fragment key={p.id}>
@@ -673,6 +713,22 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                               {p.category}
                             </span>
                           )}
+                          <div className="mt-1">
+                            <span
+                              title={hasManualTrackingChoice
+                                ? 'Bu ürün için manuel takip tercihi uygulanıyor.'
+                                : `Otomatik kural: stoklu ve en az ${MARKET_TRACKING_MIN_PRICE} TL.`}
+                              className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                                isMarketTracked
+                                  ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                                  : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                              }`}
+                            >
+                              {hasManualTrackingChoice
+                                ? (isMarketTracked ? 'Manuel takip' : 'Takip kapalı')
+                                : (isMarketTracked ? 'Otomatik takip' : 'Eşik dışı')}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right text-gray-900 dark:text-slate-100" onClick={e => e.stopPropagation()}>
                           {editingId === p.id ? (
@@ -747,6 +803,26 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleTrackingOverride(p, !isMarketTracked)}
+                              disabled={trackingSavingId === p.id}
+                              title={isMarketTracked ? 'Bu ürünü 15 günlük otomatik kuyruktan çıkar' : 'Fiyat ve stok eşiğinden bağımsız takibe al'}
+                              className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-40 dark:text-indigo-400 dark:hover:text-indigo-300"
+                            >
+                              {trackingSavingId === p.id
+                                ? 'Kaydediliyor...'
+                                : (isMarketTracked ? 'Takibi kapat' : 'Takibe al')}
+                            </button>
+                            {hasManualTrackingChoice && (
+                              <button
+                                onClick={() => handleTrackingOverride(p, null)}
+                                disabled={trackingSavingId === p.id}
+                                title={`Stok ve ${MARKET_TRACKING_MIN_PRICE} TL eşiğine geri dön`}
+                                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-200"
+                              >
+                                Otomatik
+                              </button>
+                            )}
                             <button
                               onClick={() => handleReanalyze(p.id)}
                               disabled={analyzingId === p.id}

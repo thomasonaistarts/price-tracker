@@ -32,6 +32,13 @@ export interface Database {
           product_name: string
           brand: string | null
           category: string | null
+          external_source: string | null
+          external_id: string | null
+          barcode: string | null
+          stock_quantity: number | null
+          stock_unit: string | null
+          external_updated_at: string | null
+          last_synced_at: string | null
           our_price: number
           purchase_cost: number | null
           vat_rate: number
@@ -43,6 +50,7 @@ export interface Database {
           price_ceiling: number | null
           currency: string
           is_active: boolean
+          market_tracking_override: boolean | null
           created_at: string
           updated_at: string
           last_analyzed_at: string | null
@@ -51,7 +59,7 @@ export interface Database {
           last_attempt_failure_reason: string | null
           last_attempt_error: string | null
         }
-        Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at' | 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override'> & Partial<Pick<Database['public']['Tables']['products']['Row'], 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override'>>
         Update: Partial<Database['public']['Tables']['products']['Insert']>
       }
       price_analyses: {

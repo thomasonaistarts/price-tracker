@@ -108,6 +108,7 @@ export function normalizeWolvoxProduct(input: WolvoxCatalogInput | unknown, rowI
   const purchaseCost = parseWolvoxNumber(source.purchase_cost)
   const vatRate = parseWolvoxNumber(source.vat_rate)
   const stockQuantity = parseWolvoxNumber(source.stock_quantity)
+  const isActive = booleanValue(source.is_active)
   const validationErrors: string[] = []
 
   if (!suppliedExternalId) validationErrors.push('external_id_missing')
@@ -115,9 +116,12 @@ export function normalizeWolvoxProduct(input: WolvoxCatalogInput | unknown, rowI
   if (!productName) validationErrors.push('product_name_missing')
   if (source.sales_price !== null && source.sales_price !== undefined && source.sales_price !== '' && salesPrice === null) validationErrors.push('sales_price_invalid')
   if (salesPrice !== null && salesPrice < 0) validationErrors.push('sales_price_negative')
+  if (isActive && salesPrice === null) validationErrors.push('sales_price_missing')
+  if (isActive && salesPrice === 0) validationErrors.push('sales_price_non_positive')
   if (source.purchase_cost !== null && source.purchase_cost !== undefined && source.purchase_cost !== '' && purchaseCost === null) validationErrors.push('purchase_cost_invalid')
   if (purchaseCost !== null && purchaseCost < 0) validationErrors.push('purchase_cost_negative')
   if (vatRate !== null && (vatRate < 0 || vatRate > 100)) validationErrors.push('vat_rate_out_of_range')
+  if (isActive && vatRate === null) validationErrors.push('vat_rate_missing')
   if (source.stock_quantity !== null && source.stock_quantity !== undefined && source.stock_quantity !== '' && stockQuantity === null) validationErrors.push('stock_quantity_invalid')
 
   return {
@@ -132,7 +136,7 @@ export function normalizeWolvoxProduct(input: WolvoxCatalogInput | unknown, rowI
     vat_rate: vatRate,
     stock_quantity: stockQuantity,
     unit_name: textValue(source.unit_name, 50),
-    is_active: booleanValue(source.is_active),
+    is_active: isActive,
     validation_errors: validationErrors,
     raw_data: source.raw_data && typeof source.raw_data === 'object' && !Array.isArray(source.raw_data)
       ? source.raw_data as Record<string, unknown>
@@ -140,8 +144,8 @@ export function normalizeWolvoxProduct(input: WolvoxCatalogInput | unknown, rowI
   }
 }
 
-export function prepareWolvoxCatalog(inputs: unknown[]): CatalogPreparation {
-  const records = inputs.map(normalizeWolvoxProduct)
+export function prepareWolvoxCatalog(inputs: unknown[], rowOffset = 0): CatalogPreparation {
+  const records = inputs.map((input, index) => normalizeWolvoxProduct(input, rowOffset + index))
   const seen = new Map<string, WolvoxStagingProduct>()
   const duplicateExternalIds = new Set<string>()
   let duplicateRowCount = 0
@@ -169,6 +173,12 @@ export function prepareWolvoxCatalog(inputs: unknown[]): CatalogPreparation {
 }
 
 export function createWolvoxMatchPreview(staging: WolvoxStagingProduct[], products: ExistingCatalogProduct[]) {
+  const stagingKeyCounts = new Map<string, number>()
+  for (const record of staging) {
+    const key = canonicalProductKey(record.barcode || record.sku)
+    if (key) stagingKeyCounts.set(key, (stagingKeyCounts.get(key) ?? 0) + 1)
+  }
+
   const productIndexes = new Map<string, ExistingCatalogProduct[]>()
   for (const product of products) {
     const key = canonicalProductKey(product.sku)
@@ -179,6 +189,11 @@ export function createWolvoxMatchPreview(staging: WolvoxStagingProduct[], produc
   return staging.map<WolvoxMatchPreview>(record => {
     if (record.validation_errors.length) {
       return previewResult(record, 'invalid', null, null)
+    }
+
+    const stagingKey = canonicalProductKey(record.barcode || record.sku)
+    if (stagingKey && (stagingKeyCounts.get(stagingKey) ?? 0) > 1) {
+      return previewResult(record, 'conflict', record.barcode ? 'barcode' : 'sku', null)
     }
 
     const barcodeMatches = productIndexes.get(canonicalProductKey(record.barcode)) ?? []

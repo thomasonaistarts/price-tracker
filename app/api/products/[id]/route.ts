@@ -44,6 +44,12 @@ export async function PATCH(
     if (typeof body.is_active !== 'boolean') return NextResponse.json({ error: 'Geçersiz ürün durumu' }, { status: 400 })
     update.is_active = body.is_active
   }
+  if (body.market_tracking_override !== undefined) {
+    if (body.market_tracking_override !== null && typeof body.market_tracking_override !== 'boolean') {
+      return NextResponse.json({ error: 'Geçersiz piyasa takip tercihi' }, { status: 400 })
+    }
+    update.market_tracking_override = body.market_tracking_override
+  }
 
   const nullableMoneyFields = ['purchase_cost', 'price_floor', 'price_ceiling'] as const
   const nonNegativeFields = ['vat_rate', 'commission_rate', 'shipping_cost', 'packaging_cost', 'target_margin_rate'] as const

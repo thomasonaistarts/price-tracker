@@ -6,12 +6,16 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 import { getSourceDecisions, groupSourceDecisionsByProduct } from '@/lib/source-decisions'
+import {
+  MARKET_TRACKING_POSTGREST_FILTER,
+  MARKET_TRACKING_REFRESH_DAYS,
+} from '@/lib/market-tracking'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const REFRESH_DAYS = 7
+const REFRESH_DAYS = MARKET_TRACKING_REFRESH_DAYS
 const RETRY_COOLDOWN_HOURS = 6
 const HOURLY_TARGET = 20
 const CONCURRENT = 5
@@ -33,11 +37,13 @@ export async function GET(req: NextRequest) {
     supabase
       .from('products')
       .select('*', { count: 'exact', head: true })
-      .eq('is_active', true),
+      .eq('is_active', true)
+      .or(MARKET_TRACKING_POSTGREST_FILTER),
     supabase
       .from('products')
       .select('*')
       .eq('is_active', true)
+      .or(MARKET_TRACKING_POSTGREST_FILTER)
       .or(`last_analyzed_at.is.null,last_analyzed_at.lt.${cutoff}`)
       .or(`last_attempted_at.is.null,last_attempted_at.lt.${retryCutoff}`)
       .order('last_attempted_at', { ascending: true, nullsFirst: true })
@@ -53,7 +59,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       processed: 0,
       failed: 0,
-      message: '7 günlük süresi dolmuş ürün yok',
+      message: `${REFRESH_DAYS} günlük süresi dolmuş ürün yok`,
     })
   }
 
@@ -198,7 +204,7 @@ export async function GET(req: NextRequest) {
     total_active: totalActive ?? 0,
     hourly_target: HOURLY_TARGET,
     daily_capacity: HOURLY_TARGET * 24,
-    seven_day_capacity: HOURLY_TARGET * 24 * REFRESH_DAYS,
+    refresh_window_capacity: HOURLY_TARGET * 24 * REFRESH_DAYS,
     refresh_days: REFRESH_DAYS,
     retry_cooldown_hours: RETRY_COOLDOWN_HOURS,
     elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),

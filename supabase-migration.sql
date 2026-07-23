@@ -38,6 +38,13 @@ create table public.products (
   product_name  text not null,
   brand         text,
   category      text,
+  external_source text,
+  external_id   text,
+  barcode       text,
+  stock_quantity numeric(14, 3),
+  stock_unit    text,
+  external_updated_at timestamptz,
+  last_synced_at timestamptz,
   our_price     numeric(12, 2) not null,
   purchase_cost numeric(12, 2) check (purchase_cost is null or purchase_cost >= 0),
   vat_rate      numeric(5, 2) not null default 20 check (vat_rate between 0 and 100),
@@ -51,6 +58,7 @@ create table public.products (
   check (commission_rate + target_margin_rate < 100),
   check (price_floor is null or price_ceiling is null or price_ceiling >= price_floor),
   is_active     boolean not null default true,
+  market_tracking_override boolean,
   last_analyzed_at timestamptz,
   last_attempted_at timestamptz,
   last_attempt_status text check (last_attempt_status in ('success', 'failed')),
@@ -345,8 +353,13 @@ grant execute on function public.apply_product_price_change(uuid, numeric, numer
 -- -----------------------------------------------
 create index idx_products_user_id on public.products(user_id);
 create index idx_products_sku on public.products(user_id, sku);
+create unique index idx_products_external_identity on public.products(user_id, external_source, external_id)
+  where external_source is not null and external_id is not null;
+create index idx_products_barcode on public.products(user_id, barcode)
+  where barcode is not null;
 create index idx_products_refresh_queue on public.products(is_active, last_analyzed_at);
 create index idx_products_analysis_queue on public.products(is_active, last_attempted_at, last_analyzed_at);
+create index idx_products_market_tracking_queue on public.products(is_active, market_tracking_override, our_price, stock_quantity, last_attempted_at, last_analyzed_at);
 create index idx_analyses_product_id on public.price_analyses(product_id);
 create index idx_price_analyses_product_history on public.price_analyses(user_id, product_id, run_at desc);
 create index idx_analyses_user_id on public.price_analyses(user_id);

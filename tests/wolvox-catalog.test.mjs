@@ -47,10 +47,10 @@ test('duplicate external ids are visible and cannot create duplicate staging row
 
 test('catalog preview prioritizes barcode, then SKU, and reports conflicts', () => {
   const staging = prepareWolvoxCatalog([
-    { external_id: 'w1', barcode: '869-001', product_name: 'Barkod eşleşmesi' },
-    { external_id: 'w2', sku: 'SKU-2', product_name: 'SKU eşleşmesi' },
-    { external_id: 'w3', sku: 'YENI', product_name: 'Yeni ürün' },
-    { external_id: 'w4', sku: 'ORTAK', product_name: 'Çakışan ürün' },
+    { external_id: 'w1', barcode: '869-001', product_name: 'Barkod eşleşmesi', sales_price: 10, vat_rate: 20 },
+    { external_id: 'w2', sku: 'SKU-2', product_name: 'SKU eşleşmesi', sales_price: 10, vat_rate: 20 },
+    { external_id: 'w3', sku: 'YENI', product_name: 'Yeni ürün', sales_price: 10, vat_rate: 20 },
+    { external_id: 'w4', sku: 'ORTAK', product_name: 'Çakışan ürün', sales_price: 10, vat_rate: 20 },
     { external_id: '', sku: '', product_name: '' },
   ]).records
   const products = [
@@ -76,4 +76,11 @@ test('malformed catalog rows are staged as invalid instead of crashing the reque
   assert.equal(preparation.receivedCount, 2)
   assert.equal(preparation.invalidCount, 2)
   assert.deepEqual(preparation.records.map(record => record.external_id), ['invalid-row-1', 'invalid-row-2'])
+})
+
+test('chunked catalog preparation keeps invalid row ids globally unique', () => {
+  const firstChunk = prepareWolvoxCatalog([null], 0)
+  const secondChunk = prepareWolvoxCatalog([null], 500)
+  assert.equal(firstChunk.records[0].external_id, 'invalid-row-1')
+  assert.equal(secondChunk.records[0].external_id, 'invalid-row-501')
 })
