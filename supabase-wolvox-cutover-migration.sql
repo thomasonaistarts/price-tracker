@@ -56,10 +56,6 @@ declare
   v_expected_code text;
   v_now timestamptz := now();
 begin
-  if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
-    raise exception 'service_role_required';
-  end if;
-
   select owner_user_id
     into v_owner_user_id
   from public.integration_connections

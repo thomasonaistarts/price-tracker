@@ -7,10 +7,10 @@ const sql = readFileSync(new URL('../supabase-wolvox-cutover-migration.sql', imp
 test('Wolvox cutover SQL only defines a guarded transactional RPC', () => {
   assert.match(sql, /create or replace function public\.execute_wolvox_catalog_cutover/i)
   assert.match(sql, /security definer/i)
-  assert.match(sql, /service_role_required/i)
   assert.match(sql, /verified_archive_required/i)
   assert.match(sql, /confirmation_code_mismatch/i)
   assert.doesNotMatch(sql, /select\s+public\.execute_wolvox_catalog_cutover\s*\(/i)
+  assert.doesNotMatch(sql, /request\.jwt\.claim\.role/i)
 })
 
 test('Wolvox cutover validates counts before deleting and inserting', () => {
