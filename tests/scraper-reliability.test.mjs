@@ -208,6 +208,20 @@ test('generic child umbrella cannot become an automatic variant match', () => {
   assert.equal(isAutomaticMatchEligible(result.confidence), false)
 })
 
+test('brandless paper title cannot automatically select a marketplace brand', () => {
+  const mondi = matchProduct(
+    'A3 Kağıt 500 Lü',
+    'Mondi Dns A3 Gramajlı Kağıt 90 Gr 500 Lü',
+  )
+  const xerox = matchProduct(
+    'A3 Kağıt 500 Lü',
+    'Xerox A3 Colotech Fotokopi Kağıdı 90Gr-500 Lü',
+  )
+
+  assert.equal(isAutomaticMatchEligible(mondi.confidence), false)
+  assert.equal(isAutomaticMatchEligible(xerox.confidence), false)
+})
+
 test('one weak identity token cannot select a different branded office product', () => {
   const result = matchProduct(
     '3 Lü Hareketli Evrak Rafı Fx',

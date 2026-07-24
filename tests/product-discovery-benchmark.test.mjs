@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   aggregateDiscoveryBenchmark,
   selectBalancedDiscoveryCandidates,
+  summarizeProductIdentitySignals,
   summarizeProductDiscovery,
 } from '../lib/product-discovery-benchmark.ts'
 
@@ -54,6 +55,64 @@ test('platform diagnostics explain candidates rejected by identity', () => {
   assert.equal(summary.platformOutcomes[0].outcome, 'identity_rejected')
 })
 
+test('identity signals do not treat two listings from one platform as corroboration', () => {
+  const identity = summarizeProductIdentitySignals([
+    { site: 'Trendyol', brand: 'Faber-Castell' },
+    { site: 'Trendyol', brand: 'Faber Castell' },
+  ])
+
+  assert.equal(identity.hasAnySignal, true)
+  assert.equal(identity.brand.sourceCount, 1)
+  assert.equal(identity.candidateReady, false)
+})
+
+test('identity signals require agreement across independent platforms', () => {
+  const identity = summarizeProductIdentitySignals([
+    {
+      site: 'Trendyol',
+      brand: 'Faber-Castell',
+      manufacturerCode: 'FC-123',
+      productType: 'Kurşun Kalem',
+    },
+    {
+      site: 'N11',
+      brand: 'Faber Castell',
+      manufacturerCode: 'FC123',
+      productType: 'Kurşun kalem',
+    },
+  ])
+
+  assert.equal(identity.brand.sourceCount, 2)
+  assert.equal(identity.manufacturerCode.sourceCount, 2)
+  assert.equal(identity.productType.sourceCount, 2)
+  assert.deepEqual(identity.corroboratedFields, [
+    'brand',
+    'manufacturerCode',
+    'productType',
+  ])
+  assert.equal(identity.candidateReady, true)
+})
+
+test('conflicting identity values remain signals but are not ready', () => {
+  const identity = summarizeProductIdentitySignals([
+    { site: 'Trendyol', brand: 'Adel' },
+    { site: 'N11', brand: 'Serve' },
+  ])
+
+  assert.equal(identity.hasAnySignal, true)
+  assert.equal(identity.brand.sourceCount, 1)
+  assert.equal(identity.candidateReady, false)
+})
+
+test('empty identity input is safe', () => {
+  const identity = summarizeProductIdentitySignals([])
+
+  assert.equal(identity.hasAnySignal, false)
+  assert.equal(identity.signalSourceCount, 0)
+  assert.equal(identity.candidateReady, false)
+  assert.deepEqual(identity.corroboratedFields, [])
+})
+
 test('aggregate reports an honest denominator and product discovery rate', () => {
   const aggregate = aggregateDiscoveryBenchmark([
     {
@@ -69,6 +128,7 @@ test('aggregate reports an honest denominator and product discovery rate', () =>
           reviewCandidateCount: 0,
           acceptedPlatforms: ['N11'],
           successfulStrategies: ['barcode'],
+          identity: summarizeProductIdentitySignals([]),
           platformOutcomes: [],
         },
       },
@@ -86,6 +146,7 @@ test('aggregate reports an honest denominator and product discovery rate', () =>
           reviewCandidateCount: 1,
           acceptedPlatforms: [],
           successfulStrategies: [],
+          identity: summarizeProductIdentitySignals([]),
           platformOutcomes: [],
         },
       },

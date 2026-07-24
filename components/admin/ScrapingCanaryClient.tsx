@@ -407,7 +407,7 @@ export default function ScrapingCanaryClient() {
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
             <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
               <p className="text-xs text-gray-500 dark:text-slate-400">Tamamlanan</p>
               <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">
@@ -449,6 +449,24 @@ export default function ScrapingCanaryClient() {
               </p>
               <p className="mt-1 text-xs text-violet-600 dark:text-violet-400">
                 {manualVerification.failed} yanlış · {manualVerification.pending} bekliyor
+              </p>
+            </div>
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-900 dark:bg-cyan-950/20">
+              <p className="text-xs text-cyan-700 dark:text-cyan-300">Açık kimlik sinyali</p>
+              <p className="mt-1 text-xl font-semibold text-cyan-800 dark:text-cyan-200">
+                {benchmark.identitySignalProducts}/{benchmark.completed} · {percent(benchmark.identitySignalRate)}
+              </p>
+              <p className="mt-1 text-xs text-cyan-600 dark:text-cyan-400">
+                Marka, model kodu veya ürün tipi
+              </p>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
+              <p className="text-xs text-indigo-700 dark:text-indigo-300">Çift kaynaklı kimlik adayı</p>
+              <p className="mt-1 text-xl font-semibold text-indigo-800 dark:text-indigo-200">
+                {benchmark.identityCandidateReady}/{benchmark.completed} · {percent(benchmark.identityCandidateReadyRate)}
+              </p>
+              <p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">
+                Bağımsız platformlar aynı değerde uzlaştı
               </p>
             </div>
           </div>
@@ -516,6 +534,40 @@ export default function ScrapingCanaryClient() {
                         {attempt.strategy} · {attempt.platforms.length} platform
                       </span>
                     ))}
+                  </div>
+                  <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                    data.discovery.identity.candidateReady
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200'
+                      : data.discovery.identity.hasAnySignal
+                        ? 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200'
+                        : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-400'
+                  }`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {data.discovery.identity.candidateReady
+                          ? 'Bağımsız kaynaklar kimlik alanında uzlaştı'
+                          : data.discovery.identity.hasAnySignal
+                            ? 'Tek kaynaklı/açık kimlik sinyali var'
+                            : 'Kabul edilen kaynaklarda açık kimlik alanı yok'}
+                      </span>
+                      <span>Ham kanıt · otomatik kaydedilmez</span>
+                    </div>
+                    {data.discovery.identity.hasAnySignal && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {([
+                          ['Marka', data.discovery.identity.brand],
+                          ['Model kodu', data.discovery.identity.manufacturerCode],
+                          ['Ürün tipi', data.discovery.identity.productType],
+                        ] as const).map(([label, signal]) => signal.value && (
+                          <span
+                            key={label}
+                            className="rounded-md border border-current/20 bg-white/60 px-2 py-1 dark:bg-slate-900/30"
+                          >
+                            {label}: <strong>{signal.value}</strong> · {signal.sourceCount} platform
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                     {data.discovery.platformOutcomes.map(platform => (

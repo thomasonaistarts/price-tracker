@@ -1,4 +1,4 @@
-import type { AnalysisResult } from '@/lib/analyzer'
+import type { AnalysisResult, ScrapedPrice } from '@/lib/analyzer'
 
 export type DiscoveryPlatformOutcome =
   | 'accepted'
@@ -19,6 +19,7 @@ export interface ProductDiscoverySummary {
   reviewCandidateCount: number
   acceptedPlatforms: string[]
   successfulStrategies: string[]
+  identity: ProductIdentitySignalSummary
   platformOutcomes: Array<{
     platform: string
     outcome: DiscoveryPlatformOutcome
@@ -28,6 +29,23 @@ export interface ProductDiscoverySummary {
     durationMs: number
     errorCode?: string
   }>
+}
+
+export interface ProductIdentityFieldSignal {
+  value: string | null
+  sourceCount: number
+  platforms: string[]
+}
+
+export interface ProductIdentitySignalSummary {
+  hasAnySignal: boolean
+  signalSourceCount: number
+  signalPlatforms: string[]
+  candidateReady: boolean
+  corroboratedFields: Array<'brand' | 'manufacturerCode' | 'productType'>
+  brand: ProductIdentityFieldSignal
+  manufacturerCode: ProductIdentityFieldSignal
+  productType: ProductIdentityFieldSignal
 }
 
 export interface DiscoveryRunForAggregate {
@@ -115,6 +133,96 @@ function platformOutcome(
   return 'filtered'
 }
 
+type IdentityField = 'brand' | 'manufacturerCode' | 'productType'
+
+function normalizedIdentityValue(field: IdentityField, value: string): string {
+  const compact = value.trim().replace(/\s+/g, ' ')
+  if (field === 'manufacturerCode') {
+    return compact.toLocaleUpperCase('tr-TR').replace(/[^A-Z0-9]/g, '')
+  }
+  return compact
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKC')
+    .replace(/[^a-z0-9çğıöşü]+/g, ' ')
+    .trim()
+}
+
+function summarizeIdentityField(
+  sources: ScrapedPrice[],
+  field: IdentityField,
+): ProductIdentityFieldSignal {
+  const values = new Map<string, {
+    displayValue: string
+    platforms: Set<string>
+  }>()
+
+  for (const source of sources) {
+    const rawValue = source[field]?.trim()
+    if (!rawValue) continue
+    const normalized = normalizedIdentityValue(field, rawValue)
+    if (!normalized) continue
+
+    const entry = values.get(normalized) ?? {
+      displayValue: rawValue,
+      platforms: new Set<string>(),
+    }
+    entry.platforms.add(source.site.trim().toLocaleLowerCase('tr-TR'))
+    values.set(normalized, entry)
+  }
+
+  const best = Array.from(values.entries())
+    .sort(([leftKey, left], [rightKey, right]) =>
+      right.platforms.size - left.platforms.size
+      || leftKey.localeCompare(rightKey, 'tr-TR')
+    )[0]?.[1]
+
+  if (!best) {
+    return { value: null, sourceCount: 0, platforms: [] }
+  }
+
+  return {
+    value: best.displayValue,
+    sourceCount: best.platforms.size,
+    platforms: Array.from(best.platforms).sort((left, right) =>
+      left.localeCompare(right, 'tr-TR')
+    ),
+  }
+}
+
+/**
+ * Yalnızca fiyat hesabına kabul edilmiş kaynaklardaki açık kimlik alanlarını
+ * ölçer. Aynı platformdaki birden fazla ilan bağımsız doğrulama sayılmaz.
+ * Bu özet bir yazma/onay kararı değil, canary kalite göstergesidir.
+ */
+export function summarizeProductIdentitySignals(
+  sources: ScrapedPrice[],
+): ProductIdentitySignalSummary {
+  const signalSources = sources.filter(source =>
+    Boolean(source.brand?.trim() || source.manufacturerCode?.trim() || source.productType?.trim())
+  )
+  const signalPlatforms = Array.from(new Set(
+    signalSources.map(source => source.site.trim().toLocaleLowerCase('tr-TR')),
+  )).sort((left, right) => left.localeCompare(right, 'tr-TR'))
+
+  const brand = summarizeIdentityField(sources, 'brand')
+  const manufacturerCode = summarizeIdentityField(sources, 'manufacturerCode')
+  const productType = summarizeIdentityField(sources, 'productType')
+  const fields = { brand, manufacturerCode, productType }
+  const corroboratedFields = (Object.keys(fields) as IdentityField[])
+    .filter(field => fields[field].sourceCount >= 2)
+
+  return {
+    hasAnySignal: signalSources.length > 0,
+    signalSourceCount: signalSources.length,
+    signalPlatforms,
+    candidateReady: corroboratedFields.length > 0,
+    corroboratedFields,
+    brand,
+    manufacturerCode,
+    productType,
+  }
+}
+
 export function summarizeProductDiscovery(
   result: AnalysisResult,
   minimumSources: number,
@@ -135,6 +243,7 @@ export function summarizeProductDiscovery(
     reviewCandidateCount: result.review_candidates.length,
     acceptedPlatforms: Array.from(acceptedPlatforms),
     successfulStrategies,
+    identity: summarizeProductIdentitySignals(result.sources),
     platformOutcomes: result.scraper_health.map(health => ({
       platform: health.platform,
       outcome: platformOutcome(health, acceptedPlatforms, reviewPlatforms),
@@ -155,6 +264,12 @@ export function aggregateDiscoveryBenchmark(runs: DiscoveryRunForAggregate[]) {
   const discovered = completed.filter(run => run.data.discovery.found).length
   const pricingReady = completed.filter(run => run.data.discovery.pricingReady).length
   const candidateOnly = completed.filter(run => run.data.discovery.candidateOnly).length
+  const identitySignalProducts = completed.filter(
+    run => run.data.discovery.identity?.hasAnySignal,
+  ).length
+  const identityCandidateReady = completed.filter(
+    run => run.data.discovery.identity?.candidateReady,
+  ).length
   const platformAccepted = new Map<string, number>()
   const strategyAccepted = new Map<string, number>()
 
@@ -180,6 +295,10 @@ export function aggregateDiscoveryBenchmark(runs: DiscoveryRunForAggregate[]) {
     pricingReadyRate: completed.length > 0 ? pricingReady / completed.length : 0,
     candidateOnly,
     notFound: completed.length - discovered,
+    identitySignalProducts,
+    identitySignalRate: completed.length > 0 ? identitySignalProducts / completed.length : 0,
+    identityCandidateReady,
+    identityCandidateReadyRate: completed.length > 0 ? identityCandidateReady / completed.length : 0,
     averageElapsedSeconds: completed.length > 0
       ? sum(run => run.data.elapsed_seconds) / completed.length
       : 0,

@@ -281,7 +281,7 @@ const GENERIC_IDENTITY_TOKENS = new Set([
   'figur', 'figuru', 'fiyonk', 'fotokopi', 'girl', 'hamur', 'hamuru', 'hareketli',
   'junior', 'kagit', 'kagidi', 'kalem', 'kalemi', 'kalemlik', 'kil', 'kitabi',
   'kitap', 'kids', 'kiz', 'kumbara', 'marker', 'matara', 'matarasi', 'mini',
-  'noel', 'okul', 'oyuncak', 'parca', 'puzzle', 'raf', 'rafi', 'renk', 'renkli',
+  'li', 'lu', 'noel', 'okul', 'oyuncak', 'parca', 'puzzle', 'raf', 'rafi', 'renk', 'renkli',
   'rulo', 'semsiye', 'semsiyesi', 'set', 'seti', 'sirt', 'sunger', 'susu',
   'tuval', 'urun', 'vernik', 'yilbasi',
 ])
