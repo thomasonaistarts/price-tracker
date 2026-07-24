@@ -16,6 +16,8 @@ export interface ProductSearchIdentity {
   sku?: string | null
   productName: string
   brand?: string | null
+  manufacturerCode?: string | null
+  productType?: string | null
 }
 
 function normalizeBarcodeCandidate(value?: string | null): string | null {
@@ -273,6 +275,16 @@ export function buildProductSearchQueries(identity: ProductSearchIdentity): Prod
 
   const productName = normalizeProductNameForSearch(identity.productName)
   const brand = normalizeProductNameForSearch(identity.brand ?? '')
+  const manufacturerCode = normalizeProductNameForSearch(identity.manufacturerCode ?? '')
+  const productType = normalizeProductNameForSearch(identity.productType ?? '')
+  if (manufacturerCode) {
+    add(
+      [brand || productName.split(' ')[0], manufacturerCode, productType]
+        .filter(Boolean)
+        .join(' '),
+      'model_code',
+    )
+  }
   if (brand && productName && !includesBrand(productName, brand)) {
     add(`${brand} ${productName}`, 'brand_product_name')
   }

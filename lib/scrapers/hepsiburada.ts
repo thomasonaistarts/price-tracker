@@ -1,6 +1,6 @@
 import type { ScrapedPrice } from './types.ts'
 import { assertScraperResponse, proxiedUrl, ScraperProxyError } from './proxy.ts'
-import { extractGenericCommerceMetadata } from './metadata.ts'
+import { extractGenericCommerceMetadata, extractProductBarcode } from './metadata.ts'
 
 const HEADERS_HTML = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -54,6 +54,7 @@ async function tryInternalApi(query: string, signal?: AbortSignal): Promise<Scra
           price,
           url: sku ? `https://www.hepsiburada.com/${sku}-pm-${sku}` : `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
           currency: 'TRY',
+          barcode: extractProductBarcode(item),
           ...extractGenericCommerceMetadata(item, price),
         }]
       })
@@ -95,6 +96,7 @@ function extractEmbeddedState(html: string, query: string): ScrapedPrice[] {
           price,
           url: item?.url ?? `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
           currency: 'TRY',
+          barcode: extractProductBarcode(item),
           ...extractGenericCommerceMetadata(item, price),
         }]
       })
@@ -177,6 +179,7 @@ export async function scrapeHepsiburada(query: string, signal?: AbortSignal): Pr
               price,
               url: `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`,
               currency: 'TRY',
+              barcode: extractProductBarcode(item),
               ...extractGenericCommerceMetadata(item, price),
             }]
           })

@@ -45,6 +45,41 @@ function firstBoolean(source: unknown, paths: string[]): boolean | undefined {
   return undefined
 }
 
+function normalizeBarcode(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined
+  const digits = String(value).trim().replace(/[\s-]+/g, '')
+  if (!/^\d{8,14}$/.test(digits)) return undefined
+
+  const expected = Number(digits.at(-1))
+  let sum = 0
+  for (let index = digits.length - 2, position = 0; index >= 0; index -= 1, position += 1) {
+    sum += Number(digits[index]) * (position % 2 === 0 ? 3 : 1)
+  }
+  return (10 - (sum % 10)) % 10 === expected ? digits : undefined
+}
+
+export function extractProductBarcode(source: unknown): string | undefined {
+  for (const path of [
+    'gtin14',
+    'gtin13',
+    'gtin12',
+    'gtin8',
+    'gtin',
+    'barcode',
+    'barcodeNumber',
+    'productBarcode',
+    'ean',
+    'ean13',
+    'details.barcode',
+    'details.gtin',
+    'attributes.barcode',
+  ]) {
+    const barcode = normalizeBarcode(getPath(source, path))
+    if (barcode) return barcode
+  }
+  return undefined
+}
+
 function uniqueStrings(values: Array<string | undefined>): string[] | undefined {
   const unique = Array.from(new Set(values.filter((value): value is string => Boolean(value?.trim()))))
   return unique.length ? unique : undefined

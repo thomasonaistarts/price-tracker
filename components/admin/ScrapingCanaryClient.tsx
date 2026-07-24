@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AnalysisResult } from '@/lib/analyzer'
+import {
+  aggregateDiscoveryBenchmark,
+  selectBalancedDiscoveryCandidates,
+  type ProductDiscoverySummary,
+} from '@/lib/product-discovery-benchmark'
 
 interface CanaryCandidate {
   id: string
@@ -10,6 +15,8 @@ interface CanaryCandidate {
   barcode: string | null
   product_name: string
   brand: string | null
+  manufacturer_code?: string | null
+  product_type?: string | null
   category: string | null
   our_price: number
   stock_quantity: number
@@ -19,6 +26,7 @@ interface CanaryCandidate {
 interface CanaryResponse {
   dry_run: true
   writes_performed: 0
+  minimum_sources: number
   elapsed_seconds: number
   estimated_provider_calls: number
   product: {
@@ -30,6 +38,7 @@ interface CanaryResponse {
     our_price: number
     stock_quantity: number
   }
+  discovery: ProductDiscoverySummary
   result: AnalysisResult
 }
 
@@ -70,6 +79,25 @@ function confidenceLabel(value?: string) {
   if (value === 'medium') return 'Orta'
   if (value === 'low') return 'Düşük'
   return '—'
+}
+
+const OUTCOME_LABELS = {
+  accepted: 'Bulundu',
+  review_only: 'İnceleme adayı',
+  no_results: 'Sonuç yok',
+  identity_rejected: 'Kimlik uyuşmadı',
+  out_of_stock: 'Stok dışı',
+  filtered: 'Filtrelendi',
+  timeout: 'Zaman aşımı',
+  provider_error: 'Sağlayıcı hatası',
+  not_attempted: 'Denenmedi',
+} as const
+
+function percent(value: number) {
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'percent',
+    maximumFractionDigits: 1,
+  }).format(value)
 }
 
 export default function ScrapingCanaryClient() {
@@ -114,6 +142,24 @@ export default function ScrapingCanaryClient() {
       ].some(value => value.toLocaleLowerCase('tr-TR').includes(needle))
     )
   }, [candidates, query])
+  const benchmark = useMemo(
+    () => aggregateDiscoveryBenchmark(runs),
+    [runs],
+  )
+  const manualVerification = useMemo(() => {
+    const values = runs
+      .map(run => reviews[run.productId]?.product_match ?? 'pending')
+    const passed = values.filter(value => value === 'pass').length
+    const failed = values.filter(value => value === 'fail').length
+    const reviewed = passed + failed
+    return {
+      reviewed,
+      passed,
+      failed,
+      pending: values.length - reviewed,
+      precision: reviewed > 0 ? passed / reviewed : 0,
+    }
+  }, [reviews, runs])
 
   function toggleProduct(productId: string) {
     setSelected(current => {
@@ -125,6 +171,15 @@ export default function ScrapingCanaryClient() {
       }
       return next
     })
+  }
+
+  function selectBalancedTwenty() {
+    const balanced = selectBalancedDiscoveryCandidates(filteredCandidates, 20)
+    setSelected(new Set(balanced.map(candidate => candidate.id)))
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
   }
 
   async function runCanary() {
@@ -186,6 +241,8 @@ export default function ScrapingCanaryClient() {
     const report = {
       generated_at: new Date().toISOString(),
       dry_run: true,
+      benchmark,
+      manual_verification: manualVerification,
       runs,
       reviews,
     }
@@ -285,6 +342,26 @@ export default function ScrapingCanaryClient() {
             {selected.size}/20 ürün seçildi · Supabase’e sonuç yazılmaz
           </div>
           <div className="flex gap-2">
+            {!running && (
+              <>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={selected.size === 0}
+                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Seçimi temizle
+                </button>
+                <button
+                  type="button"
+                  onClick={selectBalancedTwenty}
+                  disabled={filteredCandidates.length === 0}
+                  className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                >
+                  Dengeli 20 seç
+                </button>
+              </>
+            )}
             {running && (
               <button
                 type="button"
@@ -330,6 +407,52 @@ export default function ScrapingCanaryClient() {
             </button>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs text-gray-500 dark:text-slate-400">Tamamlanan</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">
+                {benchmark.completed}/{selected.size}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">{benchmark.errors} teknik hata</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">Ürün bulundu</p>
+              <p className="mt-1 text-xl font-semibold text-emerald-800 dark:text-emerald-200">
+                {benchmark.discovered}/{benchmark.completed} · {percent(benchmark.discoveryRate)}
+              </p>
+              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                En az bir güvenilir kaynak
+              </p>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+              <p className="text-xs text-blue-700 dark:text-blue-300">Fiyatlandırmaya hazır</p>
+              <p className="mt-1 text-xl font-semibold text-blue-800 dark:text-blue-200">
+                {benchmark.pricingReady}/{benchmark.completed} · {percent(benchmark.pricingReadyRate)}
+              </p>
+              <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                Minimum kaynak sayısına ulaştı
+              </p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+              <p className="text-xs text-amber-700 dark:text-amber-300">Diğer sonuçlar</p>
+              <p className="mt-1 text-sm font-semibold text-amber-800 dark:text-amber-200">
+                {benchmark.candidateOnly} inceleme · {benchmark.notFound} bulunamadı
+              </p>
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Ort. {benchmark.averageElapsedSeconds.toFixed(1)} sn · {benchmark.totalEstimatedProviderCalls} çağrı
+              </p>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+              <p className="text-xs text-violet-700 dark:text-violet-300">Elle doğrulanan isabet</p>
+              <p className="mt-1 text-xl font-semibold text-violet-800 dark:text-violet-200">
+                {manualVerification.passed}/{manualVerification.reviewed} · {percent(manualVerification.precision)}
+              </p>
+              <p className="mt-1 text-xs text-violet-600 dark:text-violet-400">
+                {manualVerification.failed} yanlış · {manualVerification.pending} bekliyor
+              </p>
+            </div>
+          </div>
+
           {runs.map(run => {
             if (run.status === 'error' || !run.data) {
               return (
@@ -353,6 +476,28 @@ export default function ScrapingCanaryClient() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
+                      <span className={`rounded-full px-2 py-1 font-medium ${
+                        data.discovery.found
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                          : data.discovery.candidateOnly
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300'
+                            : 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300'
+                      }`}>
+                        {data.discovery.found
+                          ? `Ürün bulundu · ${data.discovery.acceptedSourceCount} kaynak`
+                          : data.discovery.candidateOnly
+                            ? 'Yalnızca inceleme adayı'
+                            : 'Ürün bulunamadı'}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 ${
+                        data.discovery.pricingReady
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
+                          : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'
+                      }`}>
+                        {data.discovery.pricingReady
+                          ? 'Fiyatlandırmaya hazır'
+                          : `Fiyat kaynağı ${data.discovery.acceptedSourceCount}/${data.minimum_sources}`}
+                      </span>
                       <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                         Dry-run · 0 yazma
                       </span>
@@ -370,6 +515,30 @@ export default function ScrapingCanaryClient() {
                       <span key={`${attempt.strategy}-${index}`} className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
                         {attempt.strategy} · {attempt.platforms.length} platform
                       </span>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    {data.discovery.platformOutcomes.map(platform => (
+                      <div
+                        key={platform.platform}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs dark:border-slate-600 dark:bg-slate-900/50"
+                      >
+                        <div className="font-medium text-gray-800 dark:text-slate-200">
+                          {platform.platform}
+                        </div>
+                        <div className={
+                          platform.outcome === 'accepted'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : platform.outcome === 'review_only'
+                              ? 'text-orange-600 dark:text-orange-400'
+                              : 'text-gray-500 dark:text-slate-400'
+                        }>
+                          {OUTCOME_LABELS[platform.outcome]}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-gray-400">
+                          {platform.rawCandidates} aday · {(platform.durationMs / 1000).toFixed(1)} sn
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -441,6 +610,36 @@ export default function ScrapingCanaryClient() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {data.result.rejected_candidates.length > 0 && (
+                  <details className="border-t border-gray-100 bg-gray-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900/30">
+                    <summary className="cursor-pointer text-xs font-semibold text-gray-600 dark:text-slate-300">
+                      Kimlik nedeniyle reddedilen en güçlü adaylar · {data.result.rejected_candidates.length}
+                    </summary>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {data.result.rejected_candidates.map((source, index) => (
+                        <a
+                          key={`${source.site}-${source.url}-${index}`}
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-lg border border-gray-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-gray-900 dark:text-slate-100">{source.site}</span>
+                            <span className="text-xs text-gray-500">{money(source.price)}</span>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs text-gray-500 dark:text-slate-400">
+                            {source.product_name}
+                          </p>
+                          <p className="mt-2 line-clamp-2 text-[10px] text-red-600 dark:text-red-400">
+                            {source.matchReasons?.join(' · ') || 'Kimlik kurallarını geçemedi'}
+                          </p>
+                        </a>
+                      ))}
+                    </div>
+                  </details>
                 )}
 
                 <div className="border-t border-gray-100 bg-gray-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900/50">

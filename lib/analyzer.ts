@@ -30,6 +30,7 @@ export interface AnalysisResult {
   sources_count: number
   sources: ScrapedPrice[]
   review_candidates: ScrapedPrice[]
+  rejected_candidates: ScrapedPrice[]
   price_diff_percent: number | null
   alert: 'above_market' | 'below_market' | 'no_alert' | 'insufficient_data'
   alert_reason: string
@@ -51,6 +52,7 @@ export interface AnalysisOptions {
   lowerOutlierPct?: number
   activePlatforms?: string[]
   sourceDecisions?: SourceDecisionRule[]
+  discoveryTargetSources?: number
 }
 
 function r2(n: number) { return Math.round(n * 100) / 100 }
@@ -103,7 +105,15 @@ export async function analyzeProduct(
   product: ProductInput,
   options: AnalysisOptions,
 ): Promise<AnalysisResult> {
-  const { sku, product_name, category = '', brand = '', our_price } = product
+  const {
+    sku,
+    product_name,
+    category = '',
+    brand = '',
+    manufacturer_code = '',
+    product_type = '',
+    our_price,
+  } = product
   const barcode = product.barcode ?? ''
   const thresholdPercent = options.categoryThresholds?.[category] ?? options.thresholdPercent
   const minSources = options.minSources
@@ -113,6 +123,8 @@ export async function analyzeProduct(
     sku,
     productName: product_name,
     brand,
+    manufacturerCode: manufacturer_code,
+    productType: product_type,
   })
 
   // Barkoddan başlayıp yalnızca henüz sonuç bulunamayan platformlarda daha
@@ -120,6 +132,7 @@ export async function analyzeProduct(
   let scraperHealth: PlatformScrapeHealth[] = []
   let sources: ScrapedPrice[] = []
   let reviewCandidates: ScrapedPrice[] = []
+  let rejectedCandidates: ScrapedPrice[] = []
   let remainingPlatforms = Array.from(new Set(options.activePlatforms ?? SUPPORTED_PLATFORMS))
   const attemptedStrategies: ProductSearchStrategy[] = []
   const searchAttempts: AnalysisSearchAttempt[] = []
@@ -129,14 +142,17 @@ export async function analyzeProduct(
 
     let attemptHealth: PlatformScrapeHealth[] = []
     let attemptReviewCandidates: ScrapedPrice[] = []
+    let attemptRejectedCandidates: ScrapedPrice[] = []
     const attemptSources = await scrapeAllPlatforms(product_name, {
       thresholds: options.confidenceThresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS,
       activePlatforms: remainingPlatforms,
       searchQuery: search.query,
+      expectedBarcode: barcode,
       lowerOutlierPct: options.lowerOutlierPct,
       sourceDecisions: options.sourceDecisions,
       onHealth: (health) => { attemptHealth = health },
       onReviewCandidates: (candidates) => { attemptReviewCandidates = candidates },
+      onRejectedCandidates: (candidates) => { attemptRejectedCandidates = candidates },
     })
 
     attemptedStrategies.push(search.strategy)
@@ -147,8 +163,21 @@ export async function analyzeProduct(
         .filter(item => item.attempted !== false)
         .map(item => item.platform),
     })
-    sources.push(...attemptSources)
-    reviewCandidates.push(...attemptReviewCandidates)
+    sources.push(...attemptSources.map(source => ({
+      ...source,
+      searchStrategy: search.strategy,
+      searchQuery: search.query,
+    })))
+    reviewCandidates.push(...attemptReviewCandidates.map(source => ({
+      ...source,
+      searchStrategy: search.strategy,
+      searchQuery: search.query,
+    })))
+    rejectedCandidates.push(...attemptRejectedCandidates.map(source => ({
+      ...source,
+      searchStrategy: search.strategy,
+      searchQuery: search.query,
+    })))
     scraperHealth = mergeScraperHealth(scraperHealth, attemptHealth)
 
     const matchedPlatforms = new Set(sources.map(source => source.site))
@@ -157,7 +186,7 @@ export async function analyzeProduct(
       attemptHealth,
       matchedPlatforms,
     )
-    if (matchedPlatforms.size >= minSources) break
+    if (matchedPlatforms.size >= (options.discoveryTargetSources ?? minSources)) break
   }
 
   const searchNotes = attemptedStrategies.map(searchStrategyNote)
@@ -169,6 +198,14 @@ export async function analyzeProduct(
       ]),
     ).values(),
   )
+  rejectedCandidates = Array.from(
+    new Map(
+      rejectedCandidates.map(candidate => [
+        `${candidate.site.toLocaleLowerCase('tr-TR')}|${candidate.url}`,
+        candidate,
+      ]),
+    ).values(),
+  ).slice(0, 10)
 
   const market = robustMarketStatistics(sources.map(sourcePrice))
   const acceptedPriceKeys = new Set(market.acceptedPrices.map(price => price.toFixed(2)))
@@ -193,6 +230,7 @@ export async function analyzeProduct(
       max_price: prices.length ? r2(Math.max(...prices)) : null,
       sources_count: acceptedSources.length, sources: acceptedSources,
       review_candidates: reviewCandidates,
+      rejected_candidates: rejectedCandidates,
       price_diff_percent: null,
       alert: 'insufficient_data',
       alert_reason: sources.length === 0
@@ -227,6 +265,7 @@ export async function analyzeProduct(
       min_price: r2(Math.min(...prices)), max_price: r2(Math.max(...prices)),
       sources_count: acceptedSources.length, sources: acceptedSources,
       review_candidates: reviewCandidates,
+      rejected_candidates: rejectedCandidates,
       price_diff_percent: diff,
       alert: 'insufficient_data',
       alert_reason: `Fiyat farkı %${diff.toFixed(0)} (eşik: %${upperOutlierPct}) — muhtemelen yanlış ürün eşleşmesi`,
@@ -269,6 +308,7 @@ export async function analyzeProduct(
     min_price: r2(Math.min(...prices)), max_price: r2(Math.max(...prices)),
     sources_count: acceptedSources.length, sources: acceptedSources,
     review_candidates: reviewCandidates,
+    rejected_candidates: rejectedCandidates,
     price_diff_percent: diff,
     alert, alert_reason, follow_up,
     confidence,

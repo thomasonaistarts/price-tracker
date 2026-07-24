@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { platformsEligibleForFallback } from '../lib/scrapers/fallback.ts'
 import { runAbortable, runInNamedQueue, runSequentialUntil } from '../lib/scrapers/execution.ts'
-import { matchProduct } from '../lib/scrapers/similarity.ts'
+import { isAutomaticMatchEligible, matchProduct } from '../lib/scrapers/similarity.ts'
 
 test('scraper timeout aborts the underlying provider request', async () => {
   let aborted = false
@@ -198,4 +198,57 @@ test('split and punctuated forms of the same model code match', () => {
   )
 
   assert.notEqual(result.confidence, 'rejected')
+})
+
+test('generic child umbrella cannot become an automatic variant match', () => {
+  const result = matchProduct(
+    'ÇOCUK ŞEMSİYESİ',
+    'Pj Masks Çocuk Şemsiyesi 8 Telli - Pvc Kılıflı - 6-13 Yaş Kırmızı',
+  )
+  assert.equal(isAutomaticMatchEligible(result.confidence), false)
+})
+
+test('one weak identity token cannot select a different branded office product', () => {
+  const result = matchProduct(
+    '3 Lü Hareketli Evrak Rafı Fx',
+    'Maxx 2003c Metal 3 Lü Hareketli Evrak Rafı - Pastel Mor',
+  )
+  assert.equal(isAutomaticMatchEligible(result.confidence), false)
+})
+
+test('generic entertainment set cannot match an unrelated matryoshka set', () => {
+  const result = matchProduct(
+    '5Lı Eglence Setı',
+    'Sevgiliye Hediye Ahşap Tombul Iç Içe Matruşka Bebek Mavi 1 Set 5li Büyük Boy Sevimli Eğlence Seti',
+  )
+  assert.equal(isAutomaticMatchEligible(result.confidence), false)
+})
+
+test('candidate-only carton or bonus bundle is rejected', () => {
+  const carton = matchProduct(
+    'A5 Fotokopi Kağıdı',
+    '1 Koli Vege Copier Bond A5 Fotokopi Kağıdı',
+  )
+  const bonus = matchProduct(
+    "0'dan 8'e Hazırlık Seti Tonguç Akademi",
+    "Tonguç Akademi 0'dan 8'e Hazırlık Seti + Tüm Dersler Soru Bankası",
+  )
+  assert.equal(carton.confidence, 'rejected')
+  assert.equal(bonus.confidence, 'rejected')
+})
+
+test('one-brand clay identity requires an exact title or barcode confirmation', () => {
+  const result = matchProduct(
+    'Alpino Kil Hamuru 250 Gr',
+    'Alpino Seramik Hamuru 250 GR Kahverengi DP010105',
+  )
+  assert.equal(isAutomaticMatchEligible(result.confidence), false)
+})
+
+test('one-brand clay identity does not accept a different color and model as an exact subset', () => {
+  const result = matchProduct(
+    'Alpino Kil Hamuru 250 Gr',
+    'Alpino 250 Gr.Beyaz Şekillendirme Kil Hamuru Dp-010104',
+  )
+  assert.equal(isAutomaticMatchEligible(result.confidence), false)
 })

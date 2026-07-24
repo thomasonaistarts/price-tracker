@@ -16,8 +16,26 @@ import { sourceDecisionKey, type SourceDecisionRule } from '../source-decisions.
 import { filterLowPriceOutliers, selectBestOfferPerPlatform } from './selection.ts'
 import { runAbortable, runInNamedQueue, runSequentialUntil } from './execution.ts'
 import { scrapeVerifiedProductUrl } from './direct.ts'
+import { isValidGtin } from '../product-identity.ts'
 
 export type { ScrapedPrice }
+
+export type BarcodeMatch = 'match' | 'mismatch' | 'unknown'
+
+export function classifyBarcodeMatch(
+  expected?: string | null,
+  candidate?: string | null,
+): BarcodeMatch {
+  const expectedBarcode = expected?.trim().replace(/[\s-]+/g, '')
+  const candidateBarcode = candidate?.trim().replace(/[\s-]+/g, '')
+  if (
+    !expectedBarcode
+    || !candidateBarcode
+    || !isValidGtin(expectedBarcode)
+    || !isValidGtin(candidateBarcode)
+  ) return 'unknown'
+  return expectedBarcode === candidateBarcode ? 'match' : 'mismatch'
+}
 
 export const SUPPORTED_PLATFORMS = ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol'] as const
 export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
@@ -26,10 +44,12 @@ export interface ScrapeOptions {
   thresholds?: ConfidenceThresholds
   activePlatforms?: string[]
   searchQuery?: string
+  expectedBarcode?: string
   lowerOutlierPct?: number
   sourceDecisions?: SourceDecisionRule[]
   onHealth?: (health: PlatformScrapeHealth[]) => void
   onReviewCandidates?: (candidates: ScrapedPrice[]) => void
+  onRejectedCandidates?: (candidates: ScrapedPrice[]) => void
 }
 
 export interface PlatformScrapeHealth {
@@ -218,6 +238,7 @@ export async function scrapeAllPlatforms(
 
   const results: ScrapedPrice[] = []
   const reviewResults: ScrapedPrice[] = []
+  const rejectedResults: ScrapedPrice[] = []
   const decisionMap = new Map(
     (options.sourceDecisions ?? []).map((decision) => [
       sourceDecisionKey(decision.platform, decision.source_url),
@@ -229,15 +250,23 @@ export async function scrapeAllPlatforms(
     const decision = decisionMap.get(sourceDecisionKey(item.site, item.url))
     if (decision === 'rejected') continue
 
+    const barcodeMatch = classifyBarcodeMatch(options.expectedBarcode, item.barcode)
+    const barcodeMatches = barcodeMatch === 'match'
+    if (barcodeMatch === 'mismatch') continue
+
     const mr = matchProduct(query, item.product_name, thresholds)
     const manuallyApproved = decision === 'approved'
 
     const automaticConfidence = mr.confidence === 'rejected' ? 'low' : mr.confidence
     const enriched: ScrapedPrice = {
       ...item,
-      confidence: manuallyApproved ? 'exact' : automaticConfidence,
-      matchScore: manuallyApproved ? 1 : mr.score,
-      matchReasons: manuallyApproved ? ['Kullanıcı tarafından onaylandı'] : mr.reasons,
+      confidence: manuallyApproved || barcodeMatches ? 'exact' : automaticConfidence,
+      matchScore: manuallyApproved || barcodeMatches ? 1 : mr.score,
+      matchReasons: manuallyApproved
+        ? ['Kullanıcı tarafından onaylandı']
+        : barcodeMatches
+          ? ['İlan barkodu WOLVOX barkoduyla birebir eşleşti']
+          : mr.reasons,
       manualDecision: manuallyApproved ? 'approved' : undefined,
     }
 
@@ -263,6 +292,7 @@ export async function scrapeAllPlatforms(
     // doğru ürünü elle onaylayabilsin diye ayrı bir inceleme listesinde tutulur.
     if (!manuallyApproved && !isAutomaticMatchEligible(mr.confidence)) {
       if (mr.confidence === 'low') reviewResults.push(enriched)
+      if (mr.confidence === 'rejected') rejectedResults.push(enriched)
       continue
     }
 
@@ -273,6 +303,9 @@ export async function scrapeAllPlatforms(
   const selected = selectBestOfferPerPlatform(results)
   const reviewCandidates = selectBestOfferPerPlatform(reviewResults)
   options.onReviewCandidates?.(reviewCandidates)
+  options.onRejectedCandidates?.(
+    selectBestOfferPerPlatform(rejectedResults).slice(0, 5),
+  )
 
   // Şüpheli derecede düşük fiyatları platform seçimi sonrasında temizle.
   const accepted = filterLowPriceOutliers(selected, options.lowerOutlierPct ?? 50)

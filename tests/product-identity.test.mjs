@@ -166,3 +166,21 @@ test('model-code query is attempted before the exact and compact name fallbacks'
     ],
   )
 })
+
+test('explicit manufacturer code and product type form the compact first name query', () => {
+  assert.deepEqual(
+    buildProductSearchQueries({
+      barcode: null,
+      sku: 'ST05154',
+      brand: 'Barbie',
+      productName: 'Kelebek Dansçı Bebek',
+      manufacturerCode: 'HXJ10',
+      productType: 'Bebek',
+    }),
+    [
+      { query: 'Barbie HXJ10 Bebek', strategy: 'model_code' },
+      { query: 'Barbie Kelebek Dansçı Bebek', strategy: 'brand_product_name' },
+      { query: 'Kelebek Dansçı Bebek', strategy: 'product_name' },
+    ],
+  )
+})

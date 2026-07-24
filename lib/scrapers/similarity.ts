@@ -277,11 +277,13 @@ function bareNums(tokens: string[]): Set<string> {
 // Bunlar eşleşme skorunda kalır; yalnızca ayırt edici kimlik kontrolünden çıkar.
 const GENERIC_IDENTITY_TOKENS = new Set([
   'adet', 'agac', 'agaci', 'anaokul', 'beslenme', 'boy', 'boya', 'boyama',
-  'cam', 'canta', 'cantasi', 'cocuk', 'defter', 'erkek', 'figur', 'figuru',
-  'fiyonk', 'girl', 'junior', 'kalem', 'kalemi', 'kalemlik', 'kitabi', 'kitap',
-  'kids', 'kiz', 'kumbara', 'marker', 'matara', 'matarasi', 'mini', 'noel',
-  'okul', 'oyuncak', 'parca', 'puzzle', 'renk', 'renkli', 'set', 'seti',
-  'sirt', 'susu', 'urun', 'vernik', 'yilbasi',
+  'cam', 'canta', 'cantasi', 'cocuk', 'defter', 'eglence', 'erkek', 'evrak',
+  'figur', 'figuru', 'fiyonk', 'fotokopi', 'girl', 'hamur', 'hamuru', 'hareketli',
+  'junior', 'kagit', 'kagidi', 'kalem', 'kalemi', 'kalemlik', 'kil', 'kitabi',
+  'kitap', 'kids', 'kiz', 'kumbara', 'marker', 'matara', 'matarasi', 'mini',
+  'noel', 'okul', 'oyuncak', 'parca', 'puzzle', 'raf', 'rafi', 'renk', 'renkli',
+  'rulo', 'semsiye', 'semsiyesi', 'set', 'seti', 'sirt', 'sunger', 'susu',
+  'tuval', 'urun', 'vernik', 'yilbasi',
 ])
 
 const PRODUCT_SUBTYPE_GROUPS = [
@@ -310,6 +312,12 @@ function conflictingProductSubtype(queryTokens: string[], candidateTokens: strin
     }
   }
   return null
+}
+
+function hasBundleMarker(value: string): boolean {
+  const normalized = normalizeText(value)
+  return /(^|\s)(?:koli|hediyeli|yaninda|birlikte)(?:\s|$)/.test(normalized)
+    || /\s\+\s/.test(value)
 }
 
 function distinctiveIdentityTokens(tokens: string[]): string[] {
@@ -368,6 +376,10 @@ export function matchProduct(
   const subtypeConflict = conflictingProductSubtype(qTokens, cTokens)
   if (subtypeConflict) {
     return noMatch(`Ürün tipi uyuşmuyor: ${subtypeConflict}`)
+  }
+
+  if (!hasBundleMarker(query) && hasBundleMarker(candidate)) {
+    return noMatch('Aday ilanda sorguda olmayan paket/hediye içeriği var')
   }
 
   // ── 1. Birimsiz sayı zorlaması (örn. "20 Renk" vs "10 Renk") ──────────────
@@ -509,9 +521,19 @@ export function matchProduct(
   // Marka/model/seri gibi ayırt edici kimliği bulunmayan "ağaç kumbara",
   // "10 cm figür" ve "ikili fiyonk" türü genel adlar otomatik fiyat kaynağı
   // olamaz. Aday kullanıcıya gösterilir ve URL elle onaylanabilir.
-  if (queryIdentity.length === 0 && confidence !== 'rejected') {
+  if (
+    queryIdentity.length === 0
+    || (
+      queryIdentity.length === 1
+      && normalizeText(query) !== normalizeText(candidate)
+    )
+  ) {
     confidence = 'low'
-    reasons.push('Genel ürün adı — otomatik eşleşme için ayırt edici kimlik yok')
+    reasons.push(
+      queryIdentity.length === 0
+        ? 'Genel ürün adı — otomatik eşleşme için ayırt edici kimlik yok'
+        : 'Tek ayırt edici kimlik kesin eşleşme için yetersiz',
+    )
   }
 
   return {

@@ -26,6 +26,8 @@ export const productSchema = z.object({
   }, z.string().optional()),
   product_name: z.coerce.string().min(1, 'Ürün adı zorunlu'),
   brand: z.coerce.string().optional(),
+  manufacturer_code: z.coerce.string().optional(),
+  product_type: z.coerce.string().optional(),
   category: z.coerce.string().optional(),
   // Excel'den string, number, currency-format ("150,00 ₺"), boş hücre gelebilir
   our_price: z.preprocess((val) => {

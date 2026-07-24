@@ -1,5 +1,5 @@
 import type { ScrapedPrice } from './types.ts'
-import { extractTrendyolMetadata } from './metadata.ts'
+import { extractProductBarcode, extractTrendyolMetadata } from './metadata.ts'
 import { assertScraperResponse } from './proxy.ts'
 
 // Apify "Trendyol Scraper | All-In-One" — fatihtahta/trendyol-scraper
@@ -64,6 +64,7 @@ export async function scrapeTrendyol(query: string, signal?: AbortSignal): Promi
         price,
         url: productUrl.startsWith('http') ? productUrl : `https://www.trendyol.com${productUrl}`,
         currency: 'TRY',
+        barcode: extractProductBarcode(p),
         ...extractTrendyolMetadata(p, price),
       }]
     })

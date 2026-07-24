@@ -1,6 +1,6 @@
 import type { ScrapedPrice } from './types.ts'
 import { assertScraperResponse, proxiedUrl } from './proxy.ts'
-import { extractSchemaOfferMetadata } from './metadata.ts'
+import { extractProductBarcode, extractSchemaOfferMetadata } from './metadata.ts'
 import { parseMarketplacePrice } from './price.ts'
 
 const HEADERS = {
@@ -43,6 +43,7 @@ export async function scrapePttavm(query: string, signal?: AbortSignal): Promise
             price,
             url: product?.url ?? url,
             currency: 'TRY',
+            barcode: extractProductBarcode(product),
             ...extractSchemaOfferMetadata(product.offers, price),
           })
         }

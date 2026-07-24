@@ -13,6 +13,9 @@ export interface ScrapedPrice extends SourceCommerceMetadata {
   price: number
   url: string
   currency: string
+  barcode?: string
+  searchStrategy?: string
+  searchQuery?: string
   // Eşleştirme meta verisi (matchProduct tarafından doldurulur)
   confidence?: 'exact' | 'high' | 'medium' | 'low'
   matchScore?: number

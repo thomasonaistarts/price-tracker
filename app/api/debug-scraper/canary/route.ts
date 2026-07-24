@@ -5,6 +5,7 @@ import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
 import { getSourceDecisions } from '@/lib/source-decisions'
 import { getVerifiedSourceMemory } from '@/lib/source-memory'
+import { summarizeProductDiscovery } from '@/lib/product-discovery-benchmark'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,8 @@ const CANDIDATE_COLUMNS = [
   'barcode',
   'product_name',
   'brand',
+  'manufacturer_code',
+  'product_type',
   'category',
   'our_price',
   'stock_quantity',
@@ -134,11 +137,17 @@ export async function POST(req: NextRequest) {
     lowerOutlierPct: settings.outlier_filter_pct,
     activePlatforms: settings.active_platforms,
     sourceDecisions: [...rememberedSources, ...sourceDecisions],
+    // Canary'nin ana amacı ürün keşfini ölçmektir. İlk güvenilir kaynak
+    // bulunduğunda daha geniş sorgulara geçmeyerek süreyi ve sağlayıcı
+    // tüketimini sınırlı tutarız. Fiyatlandırma yeterliliği ayrıca raporlanır.
+    discoveryTargetSources: 1,
   })
+  const discovery = summarizeProductDiscovery(result, settings.min_sources)
 
   return NextResponse.json({
     dry_run: true,
     writes_performed: 0,
+    minimum_sources: settings.min_sources,
     elapsed_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
     estimated_provider_calls: result.search_attempts.reduce(
       (sum, attempt) => sum + attempt.platforms.length,
@@ -153,6 +162,7 @@ export async function POST(req: NextRequest) {
       our_price: product.our_price,
       stock_quantity: product.stock_quantity,
     },
+    discovery,
     result,
   })
 }
