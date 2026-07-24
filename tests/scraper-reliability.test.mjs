@@ -150,3 +150,52 @@ test('bag subtype mismatch is rejected before price comparison', () => {
   assert.equal(result.confidence, 'rejected')
   assert.match(result.reasons.join(' '), /Ürün tipi uyuşmuyor/)
 })
+
+test('punctuated and compact forms of the same model code remain eligible', () => {
+  const result = matchProduct(
+    'Altın Sentetik Uzun Yassı Uç Fırça CA-983 No 16',
+    'Altın CA983 Sentetik Yassı Uç Fırça No 16',
+  )
+
+  assert.notEqual(result.confidence, 'rejected')
+  assert.match(result.reasons.join(' '), /Kimlik:/)
+})
+
+test('a different model code is rejected even when the remaining name is similar', () => {
+  const result = matchProduct(
+    'Altın Sentetik Uzun Yassı Uç Fırça CA-983 No 16',
+    'Altın CA984 Sentetik Yassı Uç Fırça No 16',
+  )
+
+  assert.equal(result.confidence, 'rejected')
+  assert.match(result.reasons.join(' '), /Model kodu uyuşmuyor/)
+})
+
+test('split marketplace model code cannot satisfy a different compact model', () => {
+  const result = matchProduct(
+    'Alex Schoeller Pergel Metal Çift Kırma ALX-806',
+    'Alex Schoeller Metal Çift Kırmalı Pergel ALX 805',
+  )
+
+  assert.equal(result.confidence, 'rejected')
+  assert.match(result.reasons.join(' '), /\[alx806\].*\[alx805\]/)
+})
+
+test('candidate missing the query model code requires review instead of automatic acceptance', () => {
+  const result = matchProduct(
+    'Alex Schoeller Pergel Metal Çift Kırma ALX-806',
+    'Alex Schoeller Metal Çift Kırmalı Pergel 007872',
+  )
+
+  assert.equal(result.confidence, 'rejected')
+  assert.match(result.reasons.join(' '), /\[alx806\].*\[yok\]/)
+})
+
+test('split and punctuated forms of the same model code match', () => {
+  const result = matchProduct(
+    'Alex Schoeller Pergel Metal Çift Kırma ALX-806',
+    'Alex Schoeller Metal Çift Kırmalı Pergel ALX 806',
+  )
+
+  assert.notEqual(result.confidence, 'rejected')
+})

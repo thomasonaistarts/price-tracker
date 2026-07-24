@@ -634,3 +634,45 @@ Hedefli canlı regresyon:
 Sonraki ölçümde amaç kabul oranını gevşetmek değil; marka/model bilgisini
 WOLVOX veya tedarikçi kaynağından zenginleştirerek genel ürünleri kimlikli
 ürünlere dönüştürmektir.
+
+## 17. 24 Temmuz 2026 model kodu keşfi ve güvenlik doğrulaması
+
+WOLVOX kataloğundaki `MARKASI`, `URETICI_FIRMA` ve `MODELI` alanlarının mevcut
+SDK çıktısında boş olduğu doğrulandı. Bu nedenle marka bilgisi tahmin edilerek
+ürün kaydına yazılmadı.
+
+Ürün adında bulunan üretici/model kodları için güvenli bir keşif katmanı eklendi:
+
+- `HXJ10`, `CA-983`, `ALX-806` gibi harf-rakam kodları ürün adından çıkarılır.
+- Barkod sorgusundan sonra, tam ad sorgusundan önce kısa bir model sorgusu
+  çalıştırılır. Örnek: `Barbie HXJ10 Bebek`.
+- Aday ilan yine WOLVOX'taki tam ürün adıyla doğrulanır.
+- Tireli, bitişik ve boşluklu kod yazımları eşdeğerdir:
+  `CA-983 = CA983`, `ALX-806 = ALX 806`.
+- WOLVOX adında model kodu varsa aday ilanda aynı kod zorunludur. Farklı veya
+  eksik kodlu ilan otomatik fiyat kaynağı olamaz.
+- `No 16` gibi ölçü/numara ifadeleri model kodu sayılmaz.
+
+Katalog ölçümü:
+
+- Takibe uygun `3.023` WOLVOX ürününün `526` tanesinde model kodu bulundu.
+- Bu katmanın doğrudan kapsaması `%17,4` oldu.
+- Kod bulunmayan ürünlerde mevcut barkod, tam ad ve ayırt edici ad akışı
+  değişmeden kalır.
+
+Kontrollü, yazmasız model canary:
+
+- `5` farklı ürün ve bir güvenlik düzeltmesi tekrar koşusu kullanıldı.
+- Büyük katalog taraması yapılmadı; toplam tahmini sağlayıcı çağrısı `66`,
+  veritabanı yazımı `0` oldu.
+- `HXJ10` için üç, `HDJ36` için bir doğru model kaynağı kabul edildi.
+- `CA-983` ve `BR-289` için güvenilir otomatik kaynak kabul edilmedi.
+- İlk `ALX-806` koşusu `ALX 805` ve kodsuz iki ilanı yanlış kabul ederek bir
+  regresyon ortaya çıkardı. Model kodu zorunluluğu eklendikten sonra kaydedilmiş
+  üç adayın tamamı reddedildi.
+- Aynı `ALX-806` ürünü canlı yeniden çalıştırıldığında sonuç `no_match`, kabul
+  edilen kaynak `0`, yazım `0` oldu.
+
+Doğrulama sonunda tüm testler, TypeScript kontrolü ve production build yeniden
+çalıştırılmalıdır. Model kodu kuralı gevşetilmeden önce yeni fixture ve canary
+kanıtı zorunludur.

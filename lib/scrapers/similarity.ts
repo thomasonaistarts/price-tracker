@@ -138,6 +138,12 @@ function normalizeText(raw: string): string {
     .replace(/â/g, 'a').replace(/î/g, 'i').replace(/û/g, 'u')
 
   // 2. İnç normalizasyonu  (inç→inc zaten fold ile geldi)
+  // Üretici/model kodlarının noktalama varyantlarını eşitle:
+  // "CA-983" = "CA983", "HXJ-10" = "HXJ10".
+  // Yalnızca harfle başlayan ve 2+ rakamla biten kalıplar birleştirilir;
+  // normal tireli ürün/marka adlarına dokunulmaz.
+  s = s.replace(/\b([a-z]{1,12})[-./]+(\d{2,}[a-z0-9]*)\b/g, '$1$2')
+
   s = s.replace(/(\d+(?:\.\d+)?)\s*inch\b/g, '$1inc')  // "55 inch" → "55inc"
   s = s.replace(/(\d+(?:\.\d+)?)\s*"\s*/g,  '$1inc ')  // 55"      → "55inc"
 
@@ -312,6 +318,33 @@ function distinctiveIdentityTokens(tokens: string[]): string[] {
     .filter(token => !/^\d+$/.test(token))
 }
 
+function modelCodeTokens(tokens: string[]): Set<string> {
+  const codes = new Set(tokens.filter(token =>
+    token.length >= 4
+    && /^[a-z]/.test(token)
+    && /[a-z]/.test(token)
+    && /\d/.test(token)
+    && !/^no\d+$/.test(token)
+  ))
+
+  // Pazaryerleri "ALX-806" kodunu "ALX 806" biçiminde yazabiliyor.
+  // Yalnızca kısa kod öneklerini birleştir; "Corgi 2177" gibi normal
+  // ürün kelimesi + sayı çiftlerini model koduna dönüştürme.
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const prefix = tokens[index]
+    const suffix = tokens[index + 1]
+    if (
+      /^[a-z]{1,4}$/.test(prefix)
+      && prefix !== 'no'
+      && /^\d{2,}[a-z0-9]*$/.test(suffix)
+    ) {
+      codes.add(`${prefix}${suffix}`)
+    }
+  }
+
+  return codes
+}
+
 // ── Ana eşleştirme fonksiyonu ─────────────────────────────────────────────────
 
 export function matchProduct(
@@ -349,6 +382,21 @@ export function matchProduct(
   }
 
   // ── 2. Ayırt edici model/seri kimliği ─────────────────────────────────────
+  const queryModelCodes = modelCodeTokens(qTokens)
+  const candidateModelCodes = modelCodeTokens(cTokens)
+  if (queryModelCodes.size > 0) {
+    const hasCommonModelCode = Array.from(queryModelCodes)
+      .some(code => candidateModelCodes.has(code))
+    if (!hasCommonModelCode) {
+      const candidateLabel = candidateModelCodes.size > 0
+        ? Array.from(candidateModelCodes).join(',')
+        : 'yok'
+      const reason = `Model kodu uyuşmuyor: [${Array.from(queryModelCodes).join(',')}] ≠ [${candidateLabel}]`
+      reasons.push(reason)
+      return noMatch(reason)
+    }
+  }
+
   const queryIdentity = distinctiveIdentityTokens(qTokens)
   const candidateIdentity = new Set(distinctiveIdentityTokens(cTokens))
   const identityHits = queryIdentity.filter(token => candidateIdentity.has(token))

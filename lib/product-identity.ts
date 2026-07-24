@@ -2,6 +2,7 @@ export type ProductSearchStrategy =
   | 'barcode'
   | 'sku_barcode'
   | 'brand_product_name'
+  | 'model_code'
   | 'product_name'
   | 'identity_terms'
 
@@ -61,7 +62,9 @@ const PRODUCT_TYPE_PHRASES = [
   ['beslenme', 'cantasi'],
   ['boya', 'kalemi'],
   ['boyama', 'kitabi'],
+  ['bebek'],
   ['dolma', 'kalem'],
+  ['firca'],
   ['keceli', 'kalem'],
   ['kursun', 'kalem'],
   ['marker', 'seti'],
@@ -84,6 +87,47 @@ function searchWords(value: string): Array<{ original: string; folded: string }>
       folded: foldSearchToken(original),
     }))
     .filter(word => word.folded.length > 0)
+}
+
+function productTypeIndexes(
+  words: Array<{ original: string; folded: string }>,
+): Set<number> {
+  const indexes = new Set<number>()
+  for (const phrase of PRODUCT_TYPE_PHRASES) {
+    for (let start = 0; start <= words.length - phrase.length; start += 1) {
+      if (phrase.every((token, offset) => words[start + offset]?.folded === token)) {
+        for (let offset = 0; offset < phrase.length; offset += 1) {
+          indexes.add(start + offset)
+        }
+      }
+    }
+  }
+  return indexes
+}
+
+function isPackagingPattern(token: string): boolean {
+  return /^\d+(?:in|x)\d+$/.test(token)
+}
+
+function isModelCodeWord(word: { original: string; folded: string }): boolean {
+  const compact = word.folded
+  if (compact.length < 4 || compact.length > 24) return false
+  if (isPackagingPattern(compact)) return false
+  if (!/^[a-z]/.test(compact)) return false
+  if (!/[a-z].*\d|\d.*[a-z]/.test(compact)) return false
+  if (/^\d+(?:ml|cl|lt|l|gr|g|kg|cm|mm|m|ghz|hz)$/.test(compact)) return false
+  return true
+}
+
+export function extractModelCodes(value: string): string[] {
+  const seen = new Set<string>()
+  const codes: string[] = []
+  for (const word of searchWords(normalizeProductNameForSearch(value))) {
+    if (!isModelCodeWord(word) || seen.has(word.folded)) continue
+    seen.add(word.folded)
+    codes.push(word.original)
+  }
+  return codes
 }
 
 /**
@@ -112,7 +156,7 @@ export function buildIdentityTermsQuery(productName: string, brand?: string | nu
   const normalizedName = normalizeProductNameForSearch(productName)
   const nameWords = searchWords(normalizedName)
   const brandWords = searchWords(brand ?? '')
-  const typeIndexes = new Set<number>()
+  const typeIndexes = productTypeIndexes(nameWords)
   const selected: Array<{ original: string; folded: string }> = []
   const seen = new Set<string>()
 
@@ -120,16 +164,6 @@ export function buildIdentityTermsQuery(productName: string, brand?: string | nu
     if (!word.folded || seen.has(word.folded)) return
     seen.add(word.folded)
     selected.push(word)
-  }
-
-  for (const phrase of PRODUCT_TYPE_PHRASES) {
-    for (let start = 0; start <= nameWords.length - phrase.length; start += 1) {
-      if (phrase.every((token, offset) => nameWords[start + offset]?.folded === token)) {
-        for (let offset = 0; offset < phrase.length; offset += 1) {
-          typeIndexes.add(start + offset)
-        }
-      }
-    }
   }
 
   for (const word of brandWords) addWord(word)
@@ -142,6 +176,47 @@ export function buildIdentityTermsQuery(productName: string, brand?: string | nu
     addWord(word)
   }
 
+  for (const index of Array.from(typeIndexes).sort((a, b) => a - b)) {
+    addWord(nameWords[index])
+  }
+
+  return selected.map(word => word.original).join(' ')
+}
+
+/**
+ * Üretici kodu bulunan ürünlerde aramayı marka/ilk güçlü kelime + model kodu
+ * + ürün tipine indirger. Çıktı yalnızca keşif içindir; ilan kabulü tam ürün
+ * adıyla yapılmaya devam eder.
+ */
+export function buildModelCodeQuery(productName: string, brand?: string | null): string {
+  const normalizedName = normalizeProductNameForSearch(productName)
+  const nameWords = searchWords(normalizedName)
+  const brandWords = searchWords(brand ?? '')
+  const modelWords = nameWords.filter(isModelCodeWord)
+  if (modelWords.length === 0) return ''
+
+  const typeIndexes = productTypeIndexes(nameWords)
+  const selected: Array<{ original: string; folded: string }> = []
+  const seen = new Set<string>()
+  const addWord = (word: { original: string; folded: string }) => {
+    if (!word.folded || seen.has(word.folded)) return
+    seen.add(word.folded)
+    selected.push(word)
+  }
+
+  for (const word of brandWords) addWord(word)
+  if (brandWords.length === 0) {
+    const firstIdentityWord = nameWords.find((word, index) =>
+      !isModelCodeWord(word)
+      && !isPackagingPattern(word.folded)
+      && !DISCOVERY_FILLER_TOKENS.has(word.folded)
+      && !typeIndexes.has(index)
+      && !/^\d+$/.test(word.folded)
+    )
+    if (firstIdentityWord) addWord(firstIdentityWord)
+  }
+
+  for (const word of modelWords) addWord(word)
   for (const index of Array.from(typeIndexes).sort((a, b) => a - b)) {
     addWord(nameWords[index])
   }
@@ -201,6 +276,7 @@ export function buildProductSearchQueries(identity: ProductSearchIdentity): Prod
   if (brand && productName && !includesBrand(productName, brand)) {
     add(`${brand} ${productName}`, 'brand_product_name')
   }
+  add(buildModelCodeQuery(productName, brand), 'model_code')
   add(productName, 'product_name')
   add(buildIdentityTermsQuery(productName, brand), 'identity_terms')
 
@@ -226,6 +302,8 @@ export function searchStrategyNote(strategy: ProductSearchStrategy): string {
       return 'Arama stratejisi: GTIN biçimindeki SKU'
     case 'brand_product_name':
       return 'Arama stratejisi: marka + ürün adı'
+    case 'model_code':
+      return 'Arama stratejisi: üretici/model kodu'
     case 'identity_terms':
       return 'Arama stratejisi: ayırt edici isim ve ürün tipi'
     default:

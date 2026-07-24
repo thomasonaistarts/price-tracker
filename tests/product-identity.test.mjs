@@ -2,8 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildIdentityTermsQuery,
+  buildModelCodeQuery,
   buildProductSearchQueries,
   chooseProductSearchQuery,
+  extractModelCodes,
   isValidGtin,
   normalizeProductNameForSearch,
 } from '../lib/product-identity.ts'
@@ -121,5 +123,46 @@ test('explicit brand is kept once in the short identity query', () => {
   assert.equal(
     buildIdentityTermsQuery('Junior Love Corgi Sırt Çantası', 'Adel'),
     'Adel Love Corgi Sırt Çantası',
+  )
+})
+
+test('model codes are extracted without treating package and measurement values as models', () => {
+  assert.deepEqual(
+    extractModelCodes('2in1 Barbie Kelebek Dansçı Bebek HXJ10 500 ml'),
+    ['HXJ10'],
+  )
+  assert.deepEqual(
+    extractModelCodes('Altın Sentetik Uzun Yassı Uç Fırça CA-983 No:16'),
+    ['CA-983'],
+  )
+})
+
+test('model-code discovery query keeps identity, code and product type compact', () => {
+  assert.equal(
+    buildModelCodeQuery('2in1 Barbie Kelebek Dansçı Bebek HXJ10'),
+    'Barbie HXJ10 Bebek',
+  )
+  assert.equal(
+    buildModelCodeQuery('Altın Sentetik Uzun Yassı Uç Fırça CA-983 No:16'),
+    'Altın CA-983 Fırça',
+  )
+  assert.equal(
+    buildModelCodeQuery('Play-Doh Veteriner Seti F3639'),
+    'Play-Doh F3639',
+  )
+})
+
+test('model-code query is attempted before the exact and compact name fallbacks', () => {
+  assert.deepEqual(
+    buildProductSearchQueries({
+      barcode: null,
+      sku: 'ST05154',
+      productName: '2in1 Barbie Kelebek Dansçı Bebek HXJ10',
+    }),
+    [
+      { query: 'Barbie HXJ10 Bebek', strategy: 'model_code' },
+      { query: '2in1 Barbie Kelebek Dansçı Bebek HXJ10', strategy: 'product_name' },
+      { query: '2in1 Barbie Kelebek Dansçı HXJ10 Bebek', strategy: 'identity_terms' },
+    ],
   )
 })
