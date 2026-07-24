@@ -3,6 +3,7 @@ export type ProductSearchStrategy =
   | 'sku_barcode'
   | 'brand_product_name'
   | 'product_name'
+  | 'identity_terms'
 
 export interface ProductSearchQuery {
   query: string
@@ -24,6 +25,128 @@ function normalizeBarcodeCandidate(value?: string | null): string | null {
 
 function normalizeQueryKey(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR')
+}
+
+function foldSearchToken(value: string): string {
+  return value
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+const DISCOVERY_FILLER_TOKENS = new Set([
+  'adet',
+  'cocuk',
+  'erkek',
+  'girl',
+  'junior',
+  'kids',
+  'kiz',
+  'lisansli',
+  'mini',
+  'model',
+  'modeli',
+  'orijinal',
+  'renkli',
+  'standart',
+  'the',
+  'urun',
+  'yeni',
+])
+
+const PRODUCT_TYPE_PHRASES = [
+  ['anaokul', 'cantasi'],
+  ['beslenme', 'cantasi'],
+  ['boya', 'kalemi'],
+  ['boyama', 'kitabi'],
+  ['dolma', 'kalem'],
+  ['keceli', 'kalem'],
+  ['kursun', 'kalem'],
+  ['marker', 'seti'],
+  ['not', 'defteri'],
+  ['okul', 'cantasi'],
+  ['oyun', 'seti'],
+  ['resim', 'defteri'],
+  ['sirt', 'cantasi'],
+  ['kalemlik'],
+  ['kitap'],
+] as const
+
+function searchWords(value: string): Array<{ original: string; folded: string }> {
+  const matches = value.match(
+    /[0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+(?:[-./][0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+)*/g,
+  ) ?? []
+  return matches
+    .map(original => ({
+      original,
+      folded: foldSearchToken(original),
+    }))
+    .filter(word => word.folded.length > 0)
+}
+
+/**
+ * Pazaryeri aramasında gereksiz boşluk ve ayraçları temizler. Bu fonksiyon
+ * model numaralarını veya ürün tipini silmez; yalnızca sorguyu kararlı hale
+ * getirir. Eşleşme doğrulaması her zaman ürünün tam adıyla yapılır.
+ */
+export function normalizeProductNameForSearch(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[|_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Tam isim sonuç vermediğinde kullanılacak kısa keşif sorgusunu üretir.
+ * Marka/ilk kimlik kelimesi, model-seri kelimeleri ve ürün tipi korunur;
+ * "junior", "kids", "yeni" gibi aramayı gereksiz daraltan kelimeler atılır.
+ */
+export function buildIdentityTermsQuery(productName: string, brand?: string | null): string {
+  const normalizedName = normalizeProductNameForSearch(productName)
+  const nameWords = searchWords(normalizedName)
+  const brandWords = searchWords(brand ?? '')
+  const typeIndexes = new Set<number>()
+  const selected: Array<{ original: string; folded: string }> = []
+  const seen = new Set<string>()
+
+  const addWord = (word: { original: string; folded: string }) => {
+    if (!word.folded || seen.has(word.folded)) return
+    seen.add(word.folded)
+    selected.push(word)
+  }
+
+  for (const phrase of PRODUCT_TYPE_PHRASES) {
+    for (let start = 0; start <= nameWords.length - phrase.length; start += 1) {
+      if (phrase.every((token, offset) => nameWords[start + offset]?.folded === token)) {
+        for (let offset = 0; offset < phrase.length; offset += 1) {
+          typeIndexes.add(start + offset)
+        }
+      }
+    }
+  }
+
+  for (const word of brandWords) addWord(word)
+  if (brandWords.length === 0 && nameWords[0]) addWord(nameWords[0])
+
+  for (let index = 0; index < nameWords.length; index += 1) {
+    const word = nameWords[index]
+    if (DISCOVERY_FILLER_TOKENS.has(word.folded)) continue
+    if (typeIndexes.has(index)) continue
+    addWord(word)
+  }
+
+  for (const index of Array.from(typeIndexes).sort((a, b) => a - b)) {
+    addWord(nameWords[index])
+  }
+
+  return selected.map(word => word.original).join(' ')
 }
 
 function includesBrand(productName: string, brand: string): boolean {
@@ -73,12 +196,13 @@ export function buildProductSearchQueries(identity: ProductSearchIdentity): Prod
   const skuBarcode = normalizeBarcodeCandidate(identity.sku)
   if (skuBarcode && isValidGtin(skuBarcode)) add(skuBarcode, 'sku_barcode')
 
-  const productName = identity.productName.trim().replace(/\s+/g, ' ')
-  const brand = identity.brand?.trim().replace(/\s+/g, ' ') ?? ''
+  const productName = normalizeProductNameForSearch(identity.productName)
+  const brand = normalizeProductNameForSearch(identity.brand ?? '')
   if (brand && productName && !includesBrand(productName, brand)) {
     add(`${brand} ${productName}`, 'brand_product_name')
   }
   add(productName, 'product_name')
+  add(buildIdentityTermsQuery(productName, brand), 'identity_terms')
 
   return queries
 }
@@ -102,6 +226,8 @@ export function searchStrategyNote(strategy: ProductSearchStrategy): string {
       return 'Arama stratejisi: GTIN biçimindeki SKU'
     case 'brand_product_name':
       return 'Arama stratejisi: marka + ürün adı'
+    case 'identity_terms':
+      return 'Arama stratejisi: ayırt edici isim ve ürün tipi'
     default:
       return 'Arama stratejisi: ürün adı'
   }

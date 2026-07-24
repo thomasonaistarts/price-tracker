@@ -75,6 +75,7 @@ const UNIT_MAP: Record<string, UnitDef> = {
   adet:     { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
   tane:     { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
   paket:    { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
+  parca:    { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
   pk:       { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
   kutu:     { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
   set:      { type: 'count', factor: 1,      display: 'adet', displayFactor: 1 },
@@ -124,6 +125,8 @@ function parseNumber(s: string): number {
 function normalizeText(raw: string): string {
   let s = raw
     .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[''`''']/g, '')
     .replace(/(\d),(\d)/g, '$1.$2')
 
@@ -267,16 +270,23 @@ function bareNums(tokens: string[]): Set<string> {
 // Ürün tipini anlatan fakat model/varyant kimliği taşımayan genel kelimeler.
 // Bunlar eşleşme skorunda kalır; yalnızca ayırt edici kimlik kontrolünden çıkar.
 const GENERIC_IDENTITY_TOKENS = new Set([
-  'adet', 'anaokul', 'beslenme', 'boy', 'boya', 'boyama',
-  'canta', 'cantasi', 'cocuk', 'defter', 'erkek', 'girl',
-  'junior', 'kalem', 'kalemi', 'kalemlik', 'kitabi', 'kitap',
-  'kids', 'kiz', 'marker', 'mini', 'okul', 'renk', 'renkli',
-  'set', 'seti', 'sirt', 'urun',
+  'adet', 'agac', 'agaci', 'anaokul', 'beslenme', 'boy', 'boya', 'boyama',
+  'cam', 'canta', 'cantasi', 'cocuk', 'defter', 'erkek', 'figur', 'figuru',
+  'fiyonk', 'girl', 'junior', 'kalem', 'kalemi', 'kalemlik', 'kitabi', 'kitap',
+  'kids', 'kiz', 'kumbara', 'marker', 'matara', 'matarasi', 'mini', 'noel',
+  'okul', 'oyuncak', 'parca', 'puzzle', 'renk', 'renkli', 'set', 'seti',
+  'sirt', 'susu', 'urun', 'vernik', 'yilbasi',
 ])
 
 const PRODUCT_SUBTYPE_GROUPS = [
   ['beslenme', 'sirt', 'kalemlik'],
 ] as const
+
+const FIXED_VARIANT_QUANTITY_TOKENS = new Set([
+  'agac', 'agaci', 'bardak', 'canta', 'cantasi', 'defter', 'figur', 'figuru',
+  'kalemlik', 'kitap', 'kupa', 'matara', 'matarasi', 'oyuncak', 'puzzle',
+  'sise', 'sisesi', 'termos',
+])
 
 function conflictingProductSubtype(queryTokens: string[], candidateTokens: string[]): string | null {
   const querySet = new Set(queryTokens)
@@ -297,10 +307,7 @@ function conflictingProductSubtype(queryTokens: string[], candidateTokens: strin
 }
 
 function distinctiveIdentityTokens(tokens: string[]): string[] {
-  // İlk token çoğunlukla markadır ve mevcut algoritma tarafından ayrıca
-  // kontrol edilir. Burada model, seri, karakter ve varyant kelimelerini ara.
   return tokens
-    .slice(1)
     .filter(token => !GENERIC_IDENTITY_TOKENS.has(token))
     .filter(token => !/^\d+$/.test(token))
 }
@@ -345,9 +352,12 @@ export function matchProduct(
   const queryIdentity = distinctiveIdentityTokens(qTokens)
   const candidateIdentity = new Set(distinctiveIdentityTokens(cTokens))
   const identityHits = queryIdentity.filter(token => candidateIdentity.has(token))
+  const requiredIdentityHits = queryIdentity.length <= 1
+    ? queryIdentity.length
+    : Math.max(2, Math.ceil(queryIdentity.length * 0.6))
 
-  if (queryIdentity.length > 0 && identityHits.length === 0) {
-    const reason = `Ayırt edici kimlik uyuşmuyor: [${queryIdentity.join(', ')}]`
+  if (queryIdentity.length > 0 && identityHits.length < requiredIdentityHits) {
+    const reason = `Ayırt edici kimlik yetersiz: ${identityHits.length}/${queryIdentity.length} (min: ${requiredIdentityHits})`
     reasons.push(reason)
     return noMatch(reason)
   }
@@ -406,6 +416,13 @@ export function matchProduct(
       qtyLabel = 'exact'
       reasons.push(`Miktar eşleşiyor: ${formatQty(qQty.qty, qQty.type, qQty.display)}`)
     } else {
+      const fixedVariantProduct = [...qTokens, ...cTokens]
+        .some(token => FIXED_VARIANT_QUANTITY_TOKENS.has(token))
+      if (fixedVariantProduct) {
+        const reason = `Sabit ürün ölçüsü uyuşmuyor: ${formatQty(qQty.qty, qQty.type, qQty.display)} ≠ ${formatQty(cQty.qty, cQty.type, cQty.display)}`
+        reasons.push(reason)
+        return noMatch(reason)
+      }
       qtyScore = 0.25
       qtyLabel = 'compatible'
       reasons.push(
@@ -441,6 +458,14 @@ export function matchProduct(
     confidence = 'rejected'
   }
 
+  // Marka/model/seri gibi ayırt edici kimliği bulunmayan "ağaç kumbara",
+  // "10 cm figür" ve "ikili fiyonk" türü genel adlar otomatik fiyat kaynağı
+  // olamaz. Aday kullanıcıya gösterilir ve URL elle onaylanabilir.
+  if (queryIdentity.length === 0 && confidence !== 'rejected') {
+    confidence = 'low'
+    reasons.push('Genel ürün adı — otomatik eşleşme için ayırt edici kimlik yok')
+  }
+
   return {
     score,
     confidence,
@@ -473,6 +498,9 @@ function formatQty(baseVal: number, type: UnitType | null, display: string | nul
   }
   if (type === 'volume') {
     return baseVal >= 1000 ? `${baseVal / 1000}${display}` : `${baseVal}ml`
+  }
+  if (type === 'length') {
+    return baseVal >= 100 ? `${baseVal / 100}m` : `${baseVal}cm`
   }
   return `${baseVal}${display ?? ''}`
 }

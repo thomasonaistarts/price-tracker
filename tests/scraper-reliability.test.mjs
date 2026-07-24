@@ -104,7 +104,7 @@ test('distinctive model words reject a different backpack variant', () => {
   )
 
   assert.equal(result.confidence, 'rejected')
-  assert.match(result.reasons.join(' '), /Ayırt edici kimlik uyuşmuyor/)
+  assert.match(result.reasons.join(' '), /Ayırt edici kimlik yetersiz/)
 })
 
 test('matching distinctive model word keeps the correct Corgi candidate', () => {
@@ -114,7 +114,7 @@ test('matching distinctive model word keeps the correct Corgi candidate', () => 
   )
 
   assert.notEqual(result.confidence, 'rejected')
-  assert.match(result.reasons.join(' '), /Kimlik: 1\/2/)
+  assert.match(result.reasons.join(' '), /Kimlik: 2\/3/)
 })
 
 test('different Kuromi edition is rejected when publisher identity changes', () => {
@@ -124,7 +124,7 @@ test('different Kuromi edition is rejected when publisher identity changes', () 
   )
 
   assert.equal(result.confidence, 'rejected')
-  assert.match(result.reasons.join(' '), /Ayırt edici kimlik uyuşmuyor/)
+  assert.match(result.reasons.join(' '), /Ayırt edici kimlik yetersiz/)
 })
 
 test('same Kuromi publisher identity remains eligible', () => {

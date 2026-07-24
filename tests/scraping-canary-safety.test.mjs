@@ -41,7 +41,13 @@ test('canary client runs selected products sequentially rather than in parallel'
 
 test('local canary runner enforces the 20-product ceiling and reports zero writes', () => {
   assert.match(runnerSource, /\[ValidateRange\(1,\s*20\)\]/)
+  assert.match(runnerSource, /\[int\]\$MaxProducts\s*=\s*20/)
+  assert.match(runnerSource, /\[string\[\]\]\$Skus/)
+  assert.match(runnerSource, /Group-Object\s*\{/)
+  assert.match(runnerSource, /priceBand/)
   assert.match(runnerSource, /max_allowed\s*=\s*20/)
   assert.match(runnerSource, /writes_performed/)
+  assert.match(runnerSource, /products_with_accepted_source/)
+  assert.match(runnerSource, /products_with_usable_market/)
   assert.doesNotMatch(runnerSource, /api\/cron\/reanalyze/)
 })

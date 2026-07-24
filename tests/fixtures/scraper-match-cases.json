@@ -40,5 +40,41 @@
     "query": "Adel Beslenme Çantası Slam Dunk",
     "candidate": "Küçük Çocuk Sırt Çantası, Slam Dunk",
     "accepted": false
+  },
+  {
+    "name": "Noel figürü yerine anime figürü",
+    "query": "10 Cm Noel Figürü",
+    "candidate": "Genshin Impact Amber Mini Figür - 10 cm Koleksiyonluk Anime Figürü",
+    "accepted": false
+  },
+  {
+    "name": "fiyonk yerine otomobil zincir seti",
+    "query": "13*15 İkili Fiyonk",
+    "candidate": "Mercedes Eksantrık Zincir Seti (OM642, İkili) W203 05>07 W204 07>14 C218 13>17 W212 09>15 W221 09>13",
+    "accepted": false
+  },
+  {
+    "name": "yılbaşı ağacı yerine taşıma çantası",
+    "query": "150 Cm Yılbaşı Ağacı",
+    "candidate": "Winterfest Yılbaşı Ağacı Taşıma ve Saklama Çantası 150 cm Ağaçlara Uyumlu",
+    "accepted": false
+  },
+  {
+    "name": "kozalak süsü yerine şeker paketi süsü",
+    "query": "18 Cm Kozalak Ağaç Süsü",
+    "candidate": "Kurabiye Görünümlü Gerçekçi Şeker Paketi Şeklinde Yılbaşı Ağaç Süsü 18cm",
+    "accepted": false
+  },
+  {
+    "name": "genel ağaç kumbara başka tasarımla otomatik eşleşmez",
+    "query": "Ağaç Kumbara",
+    "candidate": "Köpek Kumbara - Ağaç İşleme - Ceviz Ağacı - Kahverengi",
+    "accepted": false
+  },
+  {
+    "name": "matarada farklı hacim farklı varyanttır",
+    "query": "500 Ml Pipetli Su Matarası Bpa Koku Sızdırma Yok",
+    "candidate": "Uzspace Pipetli 400ml Tritan Su Matarası Bpa Koku Sızdırma Yok",
+    "accepted": false
   }
 ]

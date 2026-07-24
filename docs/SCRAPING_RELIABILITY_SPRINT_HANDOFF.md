@@ -591,3 +591,46 @@ Bu işler scraping güvenilirliği kanıtlandıktan sonra ayrı sprintler olarak
 - Kullanıcının açık onayı olmadan commit, push veya deploy yapılmamalıdır.
 - Mevcut kirli çalışma ağacındaki ilgisiz dosyalar değiştirilmemeli veya temizlenmemelidir.
 - Büyük katalog taraması, barkod ve benzersiz kaynak P0 maddeleri tamamlanmadan başlatılmamalıdır.
+
+## 16. 24 Temmuz 2026 isim araması ve canary sonucu
+
+İsimden keşif, eşleşme kabul kurallarını gevşetmeden geliştirildi:
+
+- Tam ürün adı sonuç vermediğinde marka/model/ürün tipini koruyan kısa kimlik
+  sorgusu yalnızca sonuçsuz platformlarda çalışır.
+- İlan doğrulaması kısa sorguyla değil, WOLVOX'taki tam ürün adıyla yapılır.
+- Ayırt edici kimlik kelimelerinde en az `%60` kapsama ve birden fazla kimlik
+  varsa en az iki eşleşme gerekir.
+- Ayırt edici marka/model içermeyen genel ürün adları otomatik fiyat kaynağı
+  olamaz; düşük güvenli manuel inceleme adayı olarak kalır.
+- Matara, şişe, termos, çanta, puzzle gibi sabit varyantlı ürünlerde farklı
+  ölçü/adet birim fiyat normalizasyonuyla birleştirilmez.
+
+Yazmasız ilk canary:
+
+- `20` ürün, `164` tahmini sağlayıcı çağrısı, `1786,4` saniye.
+- `20/20` üründe ham ilan geldi.
+- İlk kurallarla `16/20` üründe kaynak ve `14/20` üründe en az iki kaynak
+  görünüyordu; manuel inceleme bunun güvenilir bir başarı oranı olmadığını
+  gösterdi.
+- Noel figürü/anime figürü, fiyonk/otomobil zincir seti, yılbaşı
+  ağacı/taşıma çantası, kozalak süsü/farklı süs, ağaç kumbara/farklı tasarım
+  ve `500 ml`/`400 ml` matara yanlış pozitifleri fixture'a dönüştürüldü.
+- Sıkı kuralların kayıtlı adaylar üzerindeki tekrar değerlendirmesi
+  `10/20` en az bir kaynak ve `8/20` en az iki kaynak gösterdi. Bu değer canlı
+  ikinci tam tarama değil, aynı yakalanmış adayların deterministik replay
+  sonucudur.
+
+Hedefli canlı regresyon:
+
+- `5` riskli ürün, `47` tahmini sağlayıcı çağrısı, `551,2` saniye.
+- Yalnızca güçlü özellikleri uyuşan uzaktan kumandalı oyuncak için bir
+  Trendyol kaynağı kabul edildi; tek kaynak olduğu için piyasa fiyatı
+  hesaplanmadı.
+- Noel figürü, fiyonk, yılbaşı ağacı ve farklı hacimli matara için otomatik
+  kaynak sayısı `0` kaldı.
+- Her iki canary turunda da veritabanı yazımı `0` oldu.
+
+Sonraki ölçümde amaç kabul oranını gevşetmek değil; marka/model bilgisini
+WOLVOX veya tedarikçi kaynağından zenginleştirerek genel ürünleri kimlikli
+ürünlere dönüştürmektir.

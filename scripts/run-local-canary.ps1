@@ -1,7 +1,8 @@
 param(
   [ValidateRange(1, 20)]
-  [int]$MaxProducts = 8,
-  [int]$Port = 3000
+  [int]$MaxProducts = 20,
+  [int]$Port = 3000,
+  [string[]]$Skus = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,13 +45,49 @@ $catalog = Invoke-RestMethod `
   -Method Get `
   -TimeoutSec 30
 
-$selected = @(
+$eligible = @(
   $catalog.candidates |
-    Where-Object { $_.barcode } |
-    Group-Object category |
-    ForEach-Object { $_.Group | Select-Object -First 2 } |
-    Select-Object -First $MaxProducts
+    Where-Object {
+      $_.barcode -and (
+        $Skus.Count -eq 0 -or
+        $Skus -contains $_.sku
+      )
+    }
 )
+
+if ($Skus.Count -gt 0) {
+  $selected = @($eligible | Select-Object -First $MaxProducts)
+} else {
+  $selected = @(
+    $eligible |
+      Group-Object {
+        $category = if (
+          [string]::IsNullOrWhiteSpace($_.category) -or
+          $_.category -match '^\d{8,14}$'
+        ) { 'KATEGORISIZ' } else { $_.category }
+        $priceBand = if ($_.our_price -lt 300) {
+          '150-299'
+        } elseif ($_.our_price -lt 750) {
+          '300-749'
+        } else {
+          '750+'
+        }
+        "$category|$priceBand"
+      } |
+      ForEach-Object { $_.Group | Select-Object -First 2 } |
+      Select-Object -First $MaxProducts
+  )
+}
+
+if ($Skus.Count -eq 0 -and $selected.Count -lt $MaxProducts) {
+  $selectedIds = @{}
+  foreach ($item in $selected) { $selectedIds[$item.id] = $true }
+  $selected += @(
+    $eligible |
+      Where-Object { -not $selectedIds.ContainsKey($_.id) } |
+      Select-Object -First ($MaxProducts - $selected.Count)
+  )
+}
 if ($selected.Count -eq 0) {
   throw 'No eligible canary candidates were returned.'
 }
@@ -129,6 +166,10 @@ $summary = [pscustomobject]@{
   report = $reportPath
   success = @($runs | Where-Object status -eq 'success').Count
   error = @($runs | Where-Object status -eq 'error').Count
+  products_with_accepted_source = @($runs | Where-Object { $_.sources_count -gt 0 }).Count
+  products_with_usable_market = @($runs | Where-Object { $_.sources_count -ge 2 }).Count
+  products_with_review_candidate = @($runs | Where-Object { $_.review_candidates_count -gt 0 }).Count
+  no_match = @($runs | Where-Object outcome -eq 'no_match').Count
   total_calls = ($runs | Measure-Object estimated_provider_calls -Sum).Sum
   total_elapsed_seconds = [math]::Round(($runs | Measure-Object elapsed_seconds -Sum).Sum, 1)
   total_sources = ($runs | Measure-Object sources_count -Sum).Sum

@@ -69,9 +69,8 @@ export async function GET(req: NextRequest) {
     .eq('external_source', 'wolvox')
     .gt('stock_quantity', 0)
     .gte('our_price', 150)
-    .order('category', { ascending: true, nullsFirst: false })
     .order('product_name', { ascending: true })
-    .limit(100)
+    .limit(500)
 
   if (error) {
     return NextResponse.json({ error: 'Canary ürünleri okunamadı' }, { status: 500 })
