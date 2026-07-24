@@ -1,6 +1,11 @@
 import type { ScrapedPrice } from './types.ts'
 import { assertScraperResponse, proxiedUrl } from './proxy.ts'
-import { extractGenericCommerceMetadata, extractProductBarcode, mergeCommerceMetadata } from './metadata.ts'
+import {
+  extractGenericCommerceMetadata,
+  extractProductBarcode,
+  extractProductIdentityMetadata,
+  mergeCommerceMetadata,
+} from './metadata.ts'
 import { parseMarketplacePrice } from './price.ts'
 
 const HEADERS = {
@@ -49,6 +54,10 @@ export async function scrapeIdefix(query: string, signal?: AbortSignal): Promise
           url: `https://www.idefix.com${handleUrl}`,
           currency: 'TRY',
           barcode: extractProductBarcode(variant) ?? extractProductBarcode(item),
+          ...extractProductIdentityMetadata({
+            ...item,
+            ...variant,
+          }),
           ...mergeCommerceMetadata(
             extractGenericCommerceMetadata(variant, price),
             extractGenericCommerceMetadata(item, price),

@@ -1,4 +1,8 @@
-import { extractProductBarcode, extractSchemaOfferMetadata } from './metadata.ts'
+import {
+  extractProductBarcode,
+  extractProductIdentityMetadata,
+  extractSchemaOfferMetadata,
+} from './metadata.ts'
 import { parseMarketplacePrice } from './price.ts'
 import { assertScraperResponse, proxiedUrl } from './proxy.ts'
 import type { ScrapedPrice } from './types.ts'
@@ -72,6 +76,7 @@ export function parseVerifiedProductHtml(
           url: String(candidate.url ?? sourceUrl),
           currency: String(offers?.priceCurrency ?? 'TRY'),
           barcode: extractProductBarcode(candidate),
+          ...extractProductIdentityMetadata(candidate),
           ...extractSchemaOfferMetadata(offers, price),
         }]
       }

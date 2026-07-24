@@ -1,4 +1,7 @@
-import type { SourceCommerceMetadata } from './types.ts'
+import type {
+  SourceCommerceMetadata,
+  SourceProductIdentityMetadata,
+} from './types.ts'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -78,6 +81,49 @@ export function extractProductBarcode(source: unknown): string | undefined {
     if (barcode) return barcode
   }
   return undefined
+}
+
+function cleanIdentityValue(value?: string): string | undefined {
+  if (!value) return undefined
+  const cleaned = value.replace(/\s+/g, ' ').trim()
+  if (
+    cleaned.length < 2
+    || cleaned.length > 160
+    || /^https?:\/\//i.test(cleaned)
+  ) return undefined
+  return cleaned
+}
+
+export function extractProductIdentityMetadata(
+  source: unknown,
+): SourceProductIdentityMetadata {
+  return {
+    brand: cleanIdentityValue(firstString(source, [
+      'brand.name',
+      'brand',
+      'brandName',
+      'productBrand',
+      'manufacturer.name',
+      'details.brand',
+      'attributes.brand',
+    ])),
+    manufacturerCode: cleanIdentityValue(firstString(source, [
+      'mpn',
+      'manufacturerPartNumber',
+      'model',
+      'modelNumber',
+      'details.mpn',
+      'details.model',
+      'attributes.mpn',
+      'attributes.model',
+    ])),
+    productType: cleanIdentityValue(firstString(source, [
+      'productType',
+      'productTypeName',
+      'details.productType',
+      'attributes.productType',
+    ])),
+  }
 }
 
 function uniqueStrings(values: Array<string | undefined>): string[] | undefined {

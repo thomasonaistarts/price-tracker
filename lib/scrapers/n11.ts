@@ -1,6 +1,10 @@
 import type { ScrapedPrice } from './types.ts'
 import { assertScraperResponse, proxiedUrl } from './proxy.ts'
-import { extractProductBarcode, extractSchemaOfferMetadata } from './metadata.ts'
+import {
+  extractProductBarcode,
+  extractProductIdentityMetadata,
+  extractSchemaOfferMetadata,
+} from './metadata.ts'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -34,6 +38,7 @@ function parseN11Html(html: string, query: string): ScrapedPrice[] {
               url: item.url ?? searchUrl,
               currency: 'TRY',
               barcode: extractProductBarcode(item),
+              ...extractProductIdentityMetadata(item),
               ...extractSchemaOfferMetadata(item.offers, price),
             })
           }

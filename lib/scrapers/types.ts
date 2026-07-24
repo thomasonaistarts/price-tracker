@@ -7,7 +7,13 @@ export interface SourceCommerceMetadata {
   officialSeller?: boolean
 }
 
-export interface ScrapedPrice extends SourceCommerceMetadata {
+export interface SourceProductIdentityMetadata {
+  brand?: string
+  manufacturerCode?: string
+  productType?: string
+}
+
+export interface ScrapedPrice extends SourceCommerceMetadata, SourceProductIdentityMetadata {
   site: string
   product_name: string
   price: number
