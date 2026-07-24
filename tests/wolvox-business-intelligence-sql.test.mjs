@@ -6,12 +6,22 @@ const migrationPath = new URL('../supabase-wolvox-business-intelligence-migratio
 
 test('Wolvox BI migration is idempotent and keeps movement entities separate', async () => {
   const sql = await readFile(migrationPath, 'utf8')
+  assert.match(sql, /create table if not exists public\.product_source_memory/i)
+  assert.match(sql, /function public\.remember_product_source/i)
   assert.match(sql, /create table if not exists public\.wolvox_inventory_snapshots/i)
   assert.match(sql, /create table if not exists public\.wolvox_documents/i)
   assert.match(sql, /create table if not exists public\.wolvox_document_lines/i)
   assert.match(sql, /create table if not exists public\.wolvox_current_accounts/i)
   assert.match(sql, /unique\(connection_id, external_id, document_type\)/i)
   assert.match(sql, /unique\(document_id, external_line_id\)/i)
+})
+
+test('Wolvox BI migration checks its required foundation before changing data', async () => {
+  const sql = await readFile(migrationPath, 'utf8')
+  assert.match(sql, /to_regclass\('public\.' \|\| required_relation\)/i)
+  assert.match(sql, /missing_base_relation/i)
+  assert.match(sql, /integration_connections/i)
+  assert.match(sql, /price_sync_outbox/i)
 })
 
 test('Wolvox BI tables use RLS and owner-scoped read policies', async () => {
