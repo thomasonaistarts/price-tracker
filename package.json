@@ -10,6 +10,8 @@
     "wolvox:probe": "node scripts/wolvox-bridge/diagnose.mjs probe",
     "wolvox:discover": "node scripts/wolvox-bridge/diagnose.mjs discover",
     "wolvox:stock": "node scripts/wolvox-bridge/diagnose.mjs stock",
+    "wolvox:business-samples": "powershell -ExecutionPolicy Bypass -File scripts/wolvox-bridge/export-business-samples.ps1",
+    "wolvox:summarize-report": "powershell -ExecutionPolicy Bypass -File scripts/wolvox-bridge/summarize-report.ps1",
     "db:types": "supabase gen types typescript --local > types/database.ts",
     "test": "node --test tests/*.test.mjs"
   },

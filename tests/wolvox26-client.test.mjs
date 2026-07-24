@@ -29,10 +29,16 @@ test('successful login returns only the temporary session password', () => {
 test('client exposes only documented read operations needed by Fiyatlaa', () => {
   assert.deepEqual(WOLVOX26_READ_ONLY_COMMANDS, [
     'get_sirketliste',
+    'get_faturaanalizi',
+    'get_kasahrkanalizi',
+    'get_carihrkanalizi',
+    'get_carilist',
+    'get_carihrklist',
     'get_stoklist',
     'get_stokenvanter',
     'get_depolist',
     'get_depoenvanter',
+    'get_gunsonuraporu1',
   ])
 })
 
@@ -76,4 +82,54 @@ test('depot inventory uses the official weighted average cost parameters', async
   assert.equal(parameters.get('maliyetTipi'), '7')
   assert.equal(parameters.get('doviziDahilEt'), '1')
   assert.equal(parameters.get('sadeceMikEnv'), '0')
+})
+
+test('invoice analysis uses the documented daily local-currency parameters', async () => {
+  let postedBody = ''
+  const client = new Wolvox26Client({
+    fetchImpl: async (_url, options) => {
+      postedBody = String(options.body)
+      return { ok: true, text: async () => Buffer.from('<report />', 'utf8').toString('base64') }
+    },
+  })
+  client.temporaryPassword = 'temporary'
+
+  await client.getInvoiceAnalysis({ companyCode: '001', workingYear: 2024 })
+
+  const encoded = new URLSearchParams(postedBody).get('DATA')
+  const parameters = new URLSearchParams(Buffer.from(encoded, 'base64').toString('utf8'))
+  assert.equal(parameters.get('command'), 'get_faturaanalizi')
+  assert.equal(parameters.get('sirketKodu'), '001')
+  assert.equal(parameters.get('calismaYili'), '2024')
+  assert.equal(parameters.get('analizTipi'), '1')
+  assert.equal(parameters.get('KPBDVZ'), '1')
+})
+
+test('day-end report keeps the requested sample window and excludes transfer noise', async () => {
+  let postedBody = ''
+  const client = new Wolvox26Client({
+    fetchImpl: async (_url, options) => {
+      postedBody = String(options.body)
+      return { ok: true, text: async () => Buffer.from('<report />', 'utf8').toString('base64') }
+    },
+  })
+  client.temporaryPassword = 'temporary'
+
+  await client.getDayEndReport({
+    companyCode: '001',
+    workingYear: 2024,
+    startDate: '22.07.2026 00:00:00',
+    endDate: '22.07.2026 23:59:59',
+  })
+
+  const encoded = new URLSearchParams(postedBody).get('DATA')
+  const parameters = new URLSearchParams(Buffer.from(encoded, 'base64').toString('utf8'))
+  assert.equal(parameters.get('command'), 'get_gunsonuraporu1')
+  assert.equal(parameters.get('GunBslTarihi'), '22.07.2026 00:00:00')
+  assert.equal(parameters.get('GunBtsTarihi'), '22.07.2026 23:59:59')
+  assert.equal(parameters.get('GunKaynakAlan'), '2')
+  assert.equal(parameters.get('GnlEnvMaliyet'), '7')
+  assert.equal(parameters.get('GunKasaTrs'), '0')
+  assert.equal(parameters.get('GunBankaKasaTrs'), '0')
+  assert.equal(parameters.get('GnlEnvDahilEt'), '1')
 })

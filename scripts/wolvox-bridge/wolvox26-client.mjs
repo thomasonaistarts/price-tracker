@@ -2,10 +2,16 @@ import { createHash } from 'node:crypto'
 
 const READ_ONLY_COMMANDS = new Set([
   'get_sirketliste',
+  'get_faturaanalizi',
+  'get_kasahrkanalizi',
+  'get_carihrkanalizi',
+  'get_carilist',
+  'get_carihrklist',
   'get_stoklist',
   'get_stokenvanter',
   'get_depolist',
   'get_depoenvanter',
+  'get_gunsonuraporu1',
 ])
 
 export class WolvoxSdkError extends Error {
@@ -103,6 +109,84 @@ export class Wolvox26Client {
     return this.requestReadOnly('get_sirketliste')
   }
 
+  getInvoiceAnalysis({
+    companyCode,
+    workingYear,
+    analysisType = 1,
+    localCurrency = 1,
+    analysisAccount,
+    branchFilter,
+    filter,
+  } = {}) {
+    return this.requestReadOnly('get_faturaanalizi', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      analizTipi: analysisType,
+      KPBDVZ: localCurrency,
+      analizHesap: analysisAccount,
+      subeSart: branchFilter,
+      ekSart: filter,
+    })
+  }
+
+  getCashMovementAnalysis({
+    companyCode,
+    workingYear,
+    analysisType = 1,
+    localCurrency = 1,
+    analysisAccount,
+    branchFilter,
+    filter,
+  } = {}) {
+    return this.requestReadOnly('get_kasahrkanalizi', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      analizTipi: analysisType,
+      KPBDVZ: localCurrency,
+      analizHesap: analysisAccount,
+      subeSart: branchFilter,
+      ekSart: filter,
+    })
+  }
+
+  getCurrentAccountMovementAnalysis({
+    companyCode,
+    workingYear,
+    analysisType = 1,
+    localCurrency = 1,
+    analysisAccount,
+    branchFilter,
+    filter,
+  } = {}) {
+    return this.requestReadOnly('get_carihrkanalizi', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      analizTipi: analysisType,
+      KPBDVZ: localCurrency,
+      analizHesap: analysisAccount,
+      subeSart: branchFilter,
+      ekSart: filter,
+    })
+  }
+
+  getCurrentAccountList({ companyCode, workingYear, filter, fieldList } = {}) {
+    return this.requestReadOnly('get_carilist', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      ekSart: filter,
+      fieldList,
+    })
+  }
+
+  getCurrentAccountMovements({ companyCode, workingYear, filter, fieldList } = {}) {
+    return this.requestReadOnly('get_carihrklist', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      ekSart: filter,
+      fieldList,
+    })
+  }
+
   getStockList({ companyCode, workingYear, filter, fieldList } = {}) {
     return this.requestReadOnly('get_stoklist', {
       sirketKodu: companyCode,
@@ -140,6 +224,54 @@ export class Wolvox26Client {
       maliyetTipi: costType,
       doviziDahilEt: includeForeignCurrency,
       sadeceMikEnv: quantityOnly,
+    })
+  }
+
+  getDayEndReport({
+    companyCode,
+    workingYear,
+    startDate,
+    endDate,
+    generalEndDate = endDate,
+    generalPosEndDate = endDate,
+    dateSource = 2,
+    inventoryCostType = 7,
+    inventoryQuantityFilter = 4,
+    branchFilter,
+    currency = 'TL',
+    personnel,
+    includeCashTransfers = 0,
+    includeBankCashTransfers = 0,
+    includeChequeCollections = 0,
+    includeBankTransfers = 0,
+    includeCurrentAccountTransfers = 0,
+    groupCashMovements = 0,
+    groupPosByBank = 0,
+    includeInventory = 1,
+    includeDifferenceAccounts = 0,
+  } = {}) {
+    return this.requestReadOnly('get_gunsonuraporu1', {
+      sirketKodu: companyCode,
+      calismaYili: workingYear,
+      GunBslTarihi: startDate,
+      GunBtsTarihi: endDate,
+      GnlBtsTarihi: generalEndDate,
+      GnlPosBtsTarihi: generalPosEndDate,
+      GunKaynakAlan: dateSource,
+      GnlEnvMaliyet: inventoryCostType,
+      GnlEnvMiktar: inventoryQuantityFilter,
+      GunSubeKodu: branchFilter,
+      GunParaBirimi: currency,
+      GunPersonel: personnel,
+      GunKasaTrs: includeCashTransfers,
+      GunBankaKasaTrs: includeBankCashTransfers,
+      GunCekSenTah: includeChequeCollections,
+      GunBankaTrs: includeBankTransfers,
+      GunCariVirman: includeCurrentAccountTransfers,
+      GunGrupKasaHrk: groupCashMovements,
+      GunGrupPos: groupPosByBank,
+      GnlEnvDahilEt: includeInventory,
+      GnlFarkHesDahilEt: includeDifferenceAccounts,
     })
   }
 

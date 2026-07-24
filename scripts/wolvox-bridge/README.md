@@ -85,4 +85,24 @@ Betik AKINSOFT'un resmî Delphi örneğindeki `get_depoenvanter`,
 - Geliştirici ve WOLVOX parolaları Fiyatlaa bulutuna gönderilmemelidir.
 - Parola içeren ekran görüntüsü paylaşılmamalıdır.
 - İlk bağlantı yalnızca `127.0.0.1` üzerinden kabul edilir.
-- Bu aşamada fiyat, stok, cari, fatura veya ürün yazma komutu yoktur.
+- Fiyat, stok, cari, fatura veya ürün yazma komutu yoktur.
+
+## 4. İşlem verisi keşif paketi
+
+Mağaza bilgisayarına erişim olduğunda bir günlük salt-okunur işletme
+örneklerini almak için:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\export-business-samples.ps1 -SampleDate "22.07.2026"
+```
+
+Bu paket `get_faturaanalizi`, `get_gunsonuraporu1` ve `get_stokenvanter`
+komutlarını kullanır. XML yazma komutu içermez. Çıktı paylaşılmadan önce alan
+ve doluluk özeti oluşturulmalıdır:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\summarize-report.ps1 -InputPath "C:\path\report.xml"
+```
+
+Ayrıntılı keşif ve doğrulama planı:
+`docs/WOLVOX_BUSINESS_INTELLIGENCE.md`
