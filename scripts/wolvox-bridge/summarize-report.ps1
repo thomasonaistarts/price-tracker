@@ -10,10 +10,21 @@ if ([IO.Path]::GetExtension($resolvedPath) -ne '.xml') {
   throw 'Input file must be a WOLVOX XML report.'
 }
 
-[xml]$document = Get-Content -LiteralPath $resolvedPath -Raw
-$rows = @($document.report.table.row)
+$xmlText = [IO.File]::ReadAllText($resolvedPath, [Text.Encoding]::UTF8)
+$document = [Xml.XmlDocument]::new()
+$document.PreserveWhitespace = $false
+$document.LoadXml($xmlText)
+
+if ($null -eq $document.DocumentElement) {
+  throw 'The WOLVOX report does not contain an XML document element.'
+}
+
+# Some WOLVOX reports (notably get_gunsonuraporu1) wrap their values in
+# additional sections below the row. Descendant selection keeps the summary
+# structural while supporting both flat and nested reports.
+$rows = @($document.SelectNodes('//row'))
 if ($rows.Count -eq 0) {
-  throw 'The WOLVOX report does not contain report/table/row records.'
+  $rows = @($document.DocumentElement)
 }
 
 $safeValueFields = @(
@@ -31,28 +42,45 @@ $safeValueFields = @(
   'MARKASI'
 )
 
-$fieldNames = @(
-  $rows |
-    ForEach-Object { $_.ChildNodes | ForEach-Object { $_.Name } } |
-    Sort-Object -Unique
-)
+function Get-LeafNodes {
+  param([Xml.XmlNode]$Node)
+
+  foreach ($child in @($Node.ChildNodes)) {
+    if ($child.NodeType -ne [Xml.XmlNodeType]::Element) {
+      continue
+    }
+
+    $elementChildren = @($child.ChildNodes | Where-Object {
+      $_.NodeType -eq [Xml.XmlNodeType]::Element
+    })
+    if ($elementChildren.Count -eq 0) {
+      $child
+    }
+    else {
+      Get-LeafNodes -Node $child
+    }
+  }
+}
+
+$leafNodes = @($rows | ForEach-Object { Get-LeafNodes -Node $_ })
+$fieldNames = @($leafNodes | ForEach-Object { $_.Name } | Sort-Object -Unique)
 
 $fieldSummary = foreach ($fieldName in $fieldNames) {
   $values = @(
-    $rows |
+    $leafNodes |
+      Where-Object { $_.Name -eq $fieldName } |
       ForEach-Object {
-        $node = $_.SelectSingleNode($fieldName)
-        if ($null -ne $node -and -not [string]::IsNullOrWhiteSpace($node.InnerText)) {
-          $node.InnerText.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($_.InnerText)) {
+          $_.InnerText.Trim()
         }
       }
   )
   $distinctValues = @($values | Sort-Object -Unique)
-  $safeSamples = if ($fieldName -in $safeValueFields) {
-    @($distinctValues | Select-Object -First 20)
-  }
-  else {
-    @()
+  $safeSamples = [Collections.ArrayList]::new()
+  if ($fieldName -in $safeValueFields) {
+    foreach ($sample in @($distinctValues | Select-Object -First 20)) {
+      [void]$safeSamples.Add($sample)
+    }
   }
 
   [pscustomobject]@{
@@ -72,6 +100,7 @@ $summary = [pscustomobject]@{
   generated_at = (Get-Date).ToUniversalTime().ToString('o')
   row_count = $rows.Count
   field_count = $fieldNames.Count
+  nested_structure = [bool](@($leafNodes | Where-Object { $_.ParentNode.ParentNode -ne $document.DocumentElement }).Count -gt 0)
   fields = @($fieldSummary)
   privacy_note = 'Unknown field values are intentionally omitted. Only structural fields expose limited sample values.'
 }

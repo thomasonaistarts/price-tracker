@@ -93,7 +93,7 @@ Mağaza bilgisayarına erişim olduğunda bir günlük salt-okunur işletme
 örneklerini almak için:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\export-business-samples.ps1 -SampleDate "22.07.2026"
+powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\export-business-samples.ps1 -SampleDate "2026-07-22"
 ```
 
 Bu paket `get_faturaanalizi`, `get_gunsonuraporu1` ve `get_stokenvanter`
@@ -106,3 +106,21 @@ powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\summarize-repor
 
 Ayrıntılı keşif ve doğrulama planı:
 `docs/WOLVOX_BUSINESS_INTELLIGENCE.md`
+
+## 5. Hareket verisini güvenli biçimde doğrulama ve gönderme
+
+İlk kullanımda `-Upload` yazılmaz. Betik XML'i akış halinde doğrular, WOLVOX'a ve
+Fiyatlaa'ya veri yazmaz:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\sync-business-data.ps1 `
+  -InventoryPath "C:\path\depot-inventory.xml" `
+  -FinancialPath "C:\path\invoice-analysis.xml" `
+  -SummaryDate "2026-07-22" `
+  -ConnectionId "00000000-0000-0000-0000-000000000000"
+```
+
+Üretim endpoint'i, en az 24 karakterlik köprü parolası ve bağlantı kimliği
+doğrulandıktan sonra aynı komuta açıkça `-Upload` eklenir. Uzak endpoint'lerde HTTPS
+zorunludur. Parola etkileşimli sorulur; komut satırına, dosyaya veya loga yazılmaz.
+WOLVOX tarafındaki bütün işlemler salt okunurdur.

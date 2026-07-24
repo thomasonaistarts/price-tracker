@@ -7,6 +7,8 @@ const fixture = `<?xml version="1.0" encoding="UTF-8"?>
   <row>
     <BLSTKODU><![CDATA[1]]></BLSTKODU>
     <DEPO_ADI_1><![CDATA[MERKEZ]]></DEPO_ADI_1>
+    <MIKTAR_GIREN><![CDATA[12]]></MIKTAR_GIREN>
+    <MIKTAR_CIKAN><![CDATA[5]]></MIKTAR_CIKAN>
     <MIKTAR_KALAN><![CDATA[7]]></MIKTAR_KALAN>
     <MIKTAR_KULBILIR><![CDATA[6]]></MIKTAR_KULBILIR>
     <MIKTAR_BLOKE><![CDATA[1]]></MIKTAR_BLOKE>
@@ -16,6 +18,8 @@ const fixture = `<?xml version="1.0" encoding="UTF-8"?>
   <row>
     <BLSTKODU><![CDATA[1]]></BLSTKODU>
     <DEPO_ADI_1><![CDATA[DEPO]]></DEPO_ADI_1>
+    <MIKTAR_GIREN><![CDATA[4]]></MIKTAR_GIREN>
+    <MIKTAR_CIKAN><![CDATA[1]]></MIKTAR_CIKAN>
     <MIKTAR_KALAN><![CDATA[3]]></MIKTAR_KALAN>
     <MIKTAR_KULBILIR><![CDATA[3]]></MIKTAR_KULBILIR>
     <MIKTAR_BLOKE><![CDATA[0]]></MIKTAR_BLOKE>
@@ -25,6 +29,8 @@ const fixture = `<?xml version="1.0" encoding="UTF-8"?>
   <row>
     <BLSTKODU><![CDATA[orphan]]></BLSTKODU>
     <DEPO_ADI_1><![CDATA[MERKEZ]]></DEPO_ADI_1>
+    <MIKTAR_GIREN><![CDATA[0]]></MIKTAR_GIREN>
+    <MIKTAR_CIKAN><![CDATA[2]]></MIKTAR_CIKAN>
     <MIKTAR_KALAN><![CDATA[-2]]></MIKTAR_KALAN>
     <MIKTAR_KULBILIR><![CDATA[-2]]></MIKTAR_KULBILIR>
     <BIRIM_FIYATI><![CDATA[0]]></BIRIM_FIYATI>
@@ -38,6 +44,8 @@ test('depot inventory XML reads the real WOLVOX quantity and cost fields', () =>
   assert.deepEqual(parsed.records[0], {
     external_id: '1',
     depot_name: 'MERKEZ',
+    quantity_in: 12,
+    quantity_out: 5,
     quantity_remaining: 7,
     quantity_available: 6,
     quantity_blocked: 1,
@@ -56,6 +64,8 @@ test('inventory is aggregated across depots and absent catalog items become zero
   assert.equal(merged.products[0].stock_quantity, 9)
   assert.equal(merged.products[0].purchase_cost, 103)
   assert.equal(merged.products[0].raw_data.inventory.depots.length, 2)
+  assert.equal(merged.products[0].raw_data.inventory.quantity_in, 16)
+  assert.equal(merged.products[0].raw_data.inventory.quantity_out, 6)
   assert.equal(merged.products[1].stock_quantity, 0)
   assert.equal(merged.products[1].purchase_cost, '50')
   assert.deepEqual(merged.summary, {

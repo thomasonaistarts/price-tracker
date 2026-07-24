@@ -1,4 +1,4 @@
-import type { ScrapedPrice } from './types'
+import type { ScrapedPrice } from './types.ts'
 
 const CONFIDENCE_RANK: Record<NonNullable<ScrapedPrice['confidence']>, number> = {
   exact: 4,

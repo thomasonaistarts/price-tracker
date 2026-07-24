@@ -2,7 +2,7 @@ param(
   [string]$CompanyCode = '001',
   [int]$WorkingYear = 2024,
   [Parameter(Mandatory = $true)]
-  [datetime]$SampleDate,
+  [string]$SampleDate,
   [switch]$IncludeCurrentAccounts,
   [string]$WolvoxHost = '127.0.0.1',
   [int]$Port = 3056
@@ -105,8 +105,29 @@ function Save-WolvoxReport {
   }
 }
 
+function ConvertTo-SampleDate {
+  param([string]$Value)
+
+  $formats = @('yyyy-MM-dd', 'dd.MM.yyyy')
+  $parsed = [DateTime]::MinValue
+  foreach ($format in $formats) {
+    if ([DateTime]::TryParseExact(
+      $Value.Trim(),
+      $format,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::None,
+      [ref]$parsed
+    )) {
+      return $parsed
+    }
+  }
+
+  throw 'SampleDate must use yyyy-MM-dd (recommended) or dd.MM.yyyy format.'
+}
+
 try {
-  $sampleDay = $SampleDate.ToString('dd.MM.yyyy', [Globalization.CultureInfo]::InvariantCulture)
+  $sampleDateValue = ConvertTo-SampleDate $SampleDate
+  $sampleDay = $sampleDateValue.ToString('dd.MM.yyyy', [Globalization.CultureInfo]::InvariantCulture)
   $startDate = "$sampleDay 00:00:00"
   $endDate = "$sampleDay 23:59:59"
   $runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -184,7 +205,7 @@ try {
     GnlFarkHesDahilEt       = 0
   })
   $reports.Add((Save-WolvoxReport `
-    -Name "day-end-$($SampleDate.ToString('yyyyMMdd'))" `
+    -Name "day-end-$($sampleDateValue.ToString('yyyyMMdd'))" `
     -Command 'get_gunsonuraporu1' `
     -Payload $dayEndXml `
     -OutputDirectory $outputDirectory))
@@ -202,7 +223,7 @@ try {
     sadeceMikEnv    = 0
   })
   $reports.Add((Save-WolvoxReport `
-    -Name "inventory-latest-cost-$($SampleDate.ToString('yyyyMMdd'))" `
+    -Name "inventory-latest-cost-$($sampleDateValue.ToString('yyyyMMdd'))" `
     -Command 'get_stokenvanter' `
     -Payload $latestCostInventoryXml `
     -OutputDirectory $outputDirectory))

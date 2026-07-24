@@ -1,6 +1,6 @@
-import type { ScrapedPrice } from './types'
-import { assertScraperResponse, proxiedUrl, ScraperProxyError } from './proxy'
-import { extractGenericCommerceMetadata } from './metadata'
+import type { ScrapedPrice } from './types.ts'
+import { assertScraperResponse, proxiedUrl, ScraperProxyError } from './proxy.ts'
+import { extractGenericCommerceMetadata } from './metadata.ts'
 
 const HEADERS_HTML = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

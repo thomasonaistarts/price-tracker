@@ -4,7 +4,11 @@ import { getUserSettings } from '@/lib/user-settings'
 import SettingsClient from '@/components/admin/SettingsClient'
 import type { CategoryThreshold } from '@/types/database'
 import { fetchAllRows } from '@/lib/supabase/paginate'
-import { summarizePlatformHealth, type AnalysisHealthRow } from '@/lib/platform-health'
+import {
+  summarizePlatformHealth,
+  summarizeScrapeUsage,
+  type AnalysisHealthRow,
+} from '@/lib/platform-health'
 import PlatformHealthPanel from '@/components/admin/PlatformHealthPanel'
 
 export default async function AdminSettingsPage() {
@@ -37,6 +41,11 @@ export default async function AdminSettingsPage() {
 
   const productCategories = Array.from(new Set(categoryRows.map(row => row.category))).sort()
   const platformHealth = summarizePlatformHealth(healthRows)
+  const dailyCreditLimit = Number(process.env.SCRAPER_API_DAILY_CREDIT_LIMIT)
+  const scrapeUsage = summarizeScrapeUsage(
+    healthRows,
+    Number.isFinite(dailyCreditLimit) ? dailyCreditLimit : null,
+  )
 
   return (
     <div>
@@ -46,7 +55,7 @@ export default async function AdminSettingsPage() {
           Fiyat analizi parametreleri, aktif platformlar ve bildirim tercihlerinizi yönetin
         </p>
       </div>
-      <PlatformHealthPanel summaries={platformHealth} />
+      <PlatformHealthPanel summaries={platformHealth} usage={scrapeUsage} />
       <SettingsClient
         initialSettings={settings}
         initialThresholds={(thresholdsResult.data ?? []) as CategoryThreshold[]}

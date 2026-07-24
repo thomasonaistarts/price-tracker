@@ -1,20 +1,21 @@
-import { scrapeHepsiburada } from './hepsiburada'
-import { scrapeN11 } from './n11'
-import { scrapePttavm } from './pttavm'
-import { scrapeIdefix } from './idefix'
-import { scrapeTrendyol } from './trendyol'
+import { scrapeHepsiburada } from './hepsiburada.ts'
+import { scrapeN11 } from './n11.ts'
+import { scrapePttavm } from './pttavm.ts'
+import { scrapeIdefix } from './idefix.ts'
+import { scrapeTrendyol } from './trendyol.ts'
 import {
   matchProduct,
   calcUnitPrice,
   isAutomaticMatchEligible,
   type ConfidenceThresholds,
   DEFAULT_CONFIDENCE_THRESHOLDS,
-} from './similarity'
-import type { ScrapedPrice } from './types'
-import { ScraperProxyError, type ScraperProxyErrorCode } from './proxy'
-import { sourceDecisionKey, type SourceDecisionRule } from '@/lib/source-decisions'
-import { filterLowPriceOutliers, selectBestOfferPerPlatform } from './selection'
-import { runAbortable, runInNamedQueue, runSequentialUntil } from './execution'
+} from './similarity.ts'
+import type { ScrapedPrice } from './types.ts'
+import { ScraperProxyError, type ScraperProxyErrorCode } from './proxy.ts'
+import { sourceDecisionKey, type SourceDecisionRule } from '../source-decisions.ts'
+import { filterLowPriceOutliers, selectBestOfferPerPlatform } from './selection.ts'
+import { runAbortable, runInNamedQueue, runSequentialUntil } from './execution.ts'
+import { scrapeVerifiedProductUrl } from './direct.ts'
 
 export type { ScrapedPrice }
 
@@ -153,31 +154,47 @@ export async function scrapeAllPlatforms(
   const thresholds = options.thresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS
   const searchQuery = options.searchQuery?.trim() || query
   const active = new Set(options.activePlatforms ?? SUPPORTED_PLATFORMS)
+  const verifiedUrlByPlatform = new Map(
+    (options.sourceDecisions ?? [])
+      .filter(decision => decision.decision === 'approved')
+      .map(decision => [decision.platform, decision.source_url]),
+  )
+  const withVerifiedFallback = (
+    platform: SupportedPlatform,
+    discovery: (signal: AbortSignal) => Promise<ScrapedPrice[]>,
+  ) => async (signal: AbortSignal) => {
+    const verifiedUrl = verifiedUrlByPlatform.get(platform)
+    if (verifiedUrl && platform !== 'Trendyol') {
+      const direct = await scrapeVerifiedProductUrl(platform, verifiedUrl, signal)
+      if (direct.length > 0) return direct
+    }
+    return discovery(signal)
+  }
   const scraperApiJobs: ScraperJob[] = []
   // Canary ölçümlerinde İdefix/PTTAvm daha hızlı ve daha verimli sonuç verdi.
   // Yavaş render isteyen Hepsiburada en sona bırakılır; çağrılar yine sıralıdır.
   if (active.has('İdefix')) scraperApiJobs.push(
     {
       platform: 'İdefix',
-      run: () => runScraper('İdefix', signal => scrapeIdefix(searchQuery, signal), TIMEOUT.idefix),
+      run: () => runScraper('İdefix', withVerifiedFallback('İdefix', signal => scrapeIdefix(searchQuery, signal)), TIMEOUT.idefix),
     }
   )
   if (active.has('PTTAvm')) scraperApiJobs.push(
     {
       platform: 'PTTAvm',
-      run: () => runScraper('PTTAvm', signal => scrapePttavm(searchQuery, signal), TIMEOUT.pttavm),
+      run: () => runScraper('PTTAvm', withVerifiedFallback('PTTAvm', signal => scrapePttavm(searchQuery, signal)), TIMEOUT.pttavm),
     }
   )
   if (active.has('N11')) scraperApiJobs.push(
     {
       platform: 'N11',
-      run: () => runScraper('N11', signal => scrapeN11(searchQuery, signal), TIMEOUT.n11),
+      run: () => runScraper('N11', withVerifiedFallback('N11', signal => scrapeN11(searchQuery, signal)), TIMEOUT.n11),
     }
   )
   if (active.has('Hepsiburada')) scraperApiJobs.push(
     {
       platform: 'Hepsiburada',
-      run: () => runScraper('Hepsiburada', signal => scrapeHepsiburada(searchQuery, signal), TIMEOUT.hepsiburada),
+      run: () => runScraper('Hepsiburada', withVerifiedFallback('Hepsiburada', signal => scrapeHepsiburada(searchQuery, signal)), TIMEOUT.hepsiburada),
     }
   )
 

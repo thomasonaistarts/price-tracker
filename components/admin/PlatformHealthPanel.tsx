@@ -1,5 +1,5 @@
 import PlatformLogo from '@/components/ui/PlatformLogo'
-import type { PlatformHealthSummary } from '@/lib/platform-health'
+import type { PlatformHealthSummary, ScrapeUsageSummary } from '@/lib/platform-health'
 
 const STATE = {
   healthy: {
@@ -36,7 +36,13 @@ function formatDuration(milliseconds: number) {
     : `${(milliseconds / 1000).toFixed(1)} sn`
 }
 
-export default function PlatformHealthPanel({ summaries }: { summaries: PlatformHealthSummary[] }) {
+export default function PlatformHealthPanel({
+  summaries,
+  usage,
+}: {
+  summaries: PlatformHealthSummary[]
+  usage: ScrapeUsageSummary
+}) {
   const totalSamples = summaries.reduce((sum, item) => sum + item.samples, 0)
 
   return (
@@ -86,6 +92,37 @@ export default function PlatformHealthPanel({ summaries }: { summaries: Platform
             </div>
           )
         })}
+      </div>
+      <div className="grid grid-cols-2 gap-px border-t border-gray-100 bg-gray-100 text-xs dark:border-slate-700 dark:bg-slate-700 sm:grid-cols-4">
+        <div className="bg-white px-4 py-3 dark:bg-slate-800">
+          <div className="text-gray-400 dark:text-slate-500">Tahmini ScraperAPI</div>
+          <div className="mt-1 font-semibold text-gray-800 dark:text-slate-200">
+            {usage.scraperApiCredits.toLocaleString('tr-TR')} kredi
+          </div>
+          {usage.estimatedCreditUsagePercent !== null && (
+            <div className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500">
+              Günlük sınırın %{usage.estimatedCreditUsagePercent.toFixed(1)}
+            </div>
+          )}
+        </div>
+        <div className="bg-white px-4 py-3 dark:bg-slate-800">
+          <div className="text-gray-400 dark:text-slate-500">Tahmini Apify</div>
+          <div className="mt-1 font-semibold text-gray-800 dark:text-slate-200">
+            {usage.apifyRuns.toLocaleString('tr-TR')} çalıştırma
+          </div>
+        </div>
+        <div className="bg-white px-4 py-3 dark:bg-slate-800">
+          <div className="text-gray-400 dark:text-slate-500">Kabul edilen kaynak</div>
+          <div className="mt-1 font-semibold text-gray-800 dark:text-slate-200">
+            {usage.acceptedSources.toLocaleString('tr-TR')}
+          </div>
+        </div>
+        <div className="bg-white px-4 py-3 dark:bg-slate-800">
+          <div className="text-gray-400 dark:text-slate-500">Sağlayıcı sorunu</div>
+          <div className="mt-1 font-semibold text-gray-800 dark:text-slate-200">
+            {(usage.timeoutCount + usage.providerErrorCount).toLocaleString('tr-TR')}
+          </div>
+        </div>
       </div>
     </div>
   )

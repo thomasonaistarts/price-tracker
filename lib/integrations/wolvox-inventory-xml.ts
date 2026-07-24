@@ -4,6 +4,8 @@ import { parseWolvoxReportXml } from './wolvox-report-xml.ts'
 export interface WolvoxDepotInventoryRecord {
   external_id: string
   depot_name: string | null
+  quantity_in: number
+  quantity_out: number
   quantity_remaining: number
   quantity_available: number
   quantity_blocked: number
@@ -31,6 +33,8 @@ export interface WolvoxInventoryMergeSummary {
 }
 
 interface InventoryAggregate {
+  quantityIn: number
+  quantityOut: number
   quantityRemaining: number
   quantityAvailable: number
   quantityBlocked: number
@@ -47,6 +51,8 @@ export function parseWolvoxInventoryXml(xml: string): WolvoxInventoryXmlResult {
     return {
       external_id: externalId,
       depot_name: source.DEPO_ADI_1 || source.DEPO_ADI || null,
+      quantity_in: numberOrZero(source.MIKTAR_GIREN),
+      quantity_out: numberOrZero(source.MIKTAR_CIKAN),
       quantity_remaining: numberOrZero(source.MIKTAR_KALAN),
       quantity_available: numberOrZero(source.MIKTAR_KULBILIR),
       quantity_blocked: numberOrZero(source.MIKTAR_BLOKE),
@@ -70,6 +76,8 @@ export function mergeWolvoxInventory(
 
   for (const record of inventoryRecords) {
     const aggregate: InventoryAggregate = aggregates.get(record.external_id) ?? {
+      quantityIn: 0,
+      quantityOut: 0,
       quantityRemaining: 0,
       quantityAvailable: 0,
       quantityBlocked: 0,
@@ -77,6 +85,8 @@ export function mergeWolvoxInventory(
       unitCosts: [],
       depots: new Map(),
     }
+    aggregate.quantityIn += record.quantity_in
+    aggregate.quantityOut += record.quantity_out
     aggregate.quantityRemaining += record.quantity_remaining
     aggregate.quantityAvailable += record.quantity_available
     aggregate.quantityBlocked += record.quantity_blocked
@@ -124,6 +134,8 @@ export function mergeWolvoxInventory(
         ...rawData,
         inventory: {
           found: Boolean(inventory),
+          quantity_in: inventory?.quantityIn ?? 0,
+          quantity_out: inventory?.quantityOut ?? 0,
           quantity_remaining: inventory?.quantityRemaining ?? 0,
           quantity_available: quantityAvailable,
           quantity_blocked: inventory?.quantityBlocked ?? 0,

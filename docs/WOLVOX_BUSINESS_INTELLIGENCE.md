@@ -42,7 +42,7 @@ production schema is finalized.
 Run on the stationery-store computer while WOLVOX Control Panel is open:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\export-business-samples.ps1 -SampleDate "22.07.2026"
+powershell -ExecutionPolicy Bypass -File .\scripts\wolvox-bridge\export-business-samples.ps1 -SampleDate "2026-07-22"
 ```
 
 The script:
@@ -87,20 +87,22 @@ If line-level product data is not available, the integration must remain
 aggregate-only until AKINSOFT exposes a supported report. Direct database
 queries are not assumed or enabled by this package.
 
-## Future normalized model
+## Normalized model
 
-The production migration will be written only after the real XML contracts are
-validated. The intended model is:
+The additive, RLS-protected model is defined in
+`supabase-wolvox-business-intelligence-migration.sql`:
 
-- `wolvox_sync_runs`: request window, command, status, counts and hashes,
+- `integration_sync_runs`: request window, entity, status, counts and errors,
 - `wolvox_documents`: sales, purchase and return document headers,
 - `wolvox_document_lines`: product, quantity, tax, unit price and cost,
 - `wolvox_current_accounts`: supplier/customer business identities,
 - `wolvox_inventory_snapshots`: product/depot quantities and cost,
 - `wolvox_channel_mappings`: physical store, web and future marketplace codes.
 
-Raw customer names, phone numbers and addresses are not needed for Fiyatlaa
-analytics and should not be transferred to the cloud.
+Inventory and daily aggregate records can be synchronized now. Document-line
+ingestion stays empty until a supported, stable line-level WOLVOX export is
+verified. Raw customer names, phone numbers and addresses are not needed for
+Fiyatlaa analytics and must not be transferred to the cloud.
 
 ## Channel attribution
 

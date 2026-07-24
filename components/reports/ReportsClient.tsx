@@ -3,6 +3,12 @@
 import { useState, useMemo } from 'react'
 import PlatformLogo from '@/components/ui/PlatformLogo'
 import { downloadExcel } from '@/lib/exportExcel'
+import type {
+  FinancialSummary,
+  InventoryCostChange,
+  InventoryIntelligenceRow,
+  SalesChannel,
+} from '@/lib/integrations/wolvox-business-intelligence'
 
 // ── Tipler ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +48,10 @@ interface HistoryItem {
 interface Props {
   analyses: ReportRow[]
   history: HistoryItem[]
+  inventoryIntelligence: InventoryIntelligenceRow[]
+  financialSummary: FinancialSummary | null
+  costChanges: InventoryCostChange[]
+  channelSummary: Array<{ channel: SalesChannel; documents: number; netSales: number }>
 }
 
 // ── Yardımcılar ───────────────────────────────────────────────────────────────
@@ -72,8 +82,15 @@ const ALERT_LABEL: Record<string, string> = {
   insufficient_data: 'Veri yetersiz',
 }
 
-export default function ReportsClient({ analyses, history }: Props) {
-  const [tab, setTab] = useState<'summary' | 'category' | 'trend' | 'platform'>('summary')
+export default function ReportsClient({
+  analyses,
+  history,
+  inventoryIntelligence,
+  financialSummary,
+  costChanges,
+  channelSummary,
+}: Props) {
+  const [tab, setTab] = useState<'summary' | 'inventory' | 'category' | 'trend' | 'platform'>('summary')
 
   const valid = useMemo(() => analyses.filter(a => a.products != null), [analyses])
 
@@ -105,6 +122,7 @@ export default function ReportsClient({ analyses, history }: Props) {
       <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 p-1 rounded-xl w-fit min-w-max">
         {([
           { key: 'summary',  label: '📊 Özet & Aksiyon' },
+          { key: 'inventory', label: '📦 Stok zekâsı' },
           { key: 'category', label: '🗂 Kategori' },
           { key: 'trend',    label: '📈 Trend' },
           { key: 'platform', label: '🏪 Platform' },
@@ -135,9 +153,145 @@ export default function ReportsClient({ analyses, history }: Props) {
       </div>
 
       {tab === 'summary'  && <SummaryTab  rows={valid} />}
+      {tab === 'inventory' && (
+        <InventoryTab
+          rows={inventoryIntelligence}
+          financialSummary={financialSummary}
+          costChanges={costChanges}
+          channelSummary={channelSummary}
+        />
+      )}
       {tab === 'category' && <CategoryTab rows={valid} />}
       {tab === 'trend'    && <TrendTab    history={history} />}
       {tab === 'platform' && <PlatformTab rows={valid} />}
+    </div>
+  )
+}
+
+function InventoryTab({
+  rows,
+  financialSummary,
+  costChanges,
+  channelSummary,
+}: {
+  rows: InventoryIntelligenceRow[]
+  financialSummary: FinancialSummary | null
+  costChanges: InventoryCostChange[]
+  channelSummary: Array<{ channel: SalesChannel; documents: number; netSales: number }>
+}) {
+  if (rows.length === 0 && !financialSummary) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-10 text-center dark:border-slate-700 dark:bg-slate-800">
+        <div className="text-sm font-medium text-gray-700 dark:text-slate-200">WOLVOX hareket senkronu bekleniyor</div>
+        <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-gray-500 dark:text-slate-400">
+          İlk tarih aralıklı stok hareketi içeri alındığında hızlı tükenen, stok bitiş riski ve hareketsiz ürünler burada görünecek.
+        </p>
+      </div>
+    )
+  }
+
+  const fast = rows.filter(row => row.status === 'fast')
+  const dead = rows.filter(row => row.status === 'dead')
+  const slow = rows.filter(row => row.status === 'slow')
+  const displayed = rows.filter(row => row.status !== 'out_of_stock').slice(0, 20)
+  const channelLabels: Record<SalesChannel, string> = {
+    store: 'Mağaza',
+    web: 'Web',
+    marketplace: 'Pazaryeri',
+    unknown: 'Eşlenmemiş',
+  }
+
+  return (
+    <div className="space-y-4">
+      {financialSummary && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard label={`${financialSummary.days} gün net satış`} value={fmt(financialSummary.netSalesTotal)} color="text-emerald-600" />
+          <KpiCard label="Satış iadesi" value={fmt(financialSummary.salesReturnTotal)} color="text-amber-600" />
+          <KpiCard label="Net alış" value={fmt(financialSummary.netPurchaseTotal)} color="text-gray-800 dark:text-slate-200" />
+          <KpiCard label="Gider öncesi fark" value={fmt(financialSummary.grossProfitBeforeExpenses)} color={financialSummary.grossProfitBeforeExpenses >= 0 ? 'text-blue-600' : 'text-red-600'} />
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard label="30 gün içinde bitebilir" value={fast.length} color="text-red-600" />
+        <KpiCard label="Yavaş stok" value={slow.length} color="text-amber-600" />
+        <KpiCard label="Hareketsiz stok" value={dead.length} color="text-gray-700 dark:text-slate-200" />
+      </div>
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-gray-100 px-4 py-3 dark:border-slate-700">
+          <div className="text-sm font-semibold text-gray-900 dark:text-slate-100">En hızlı tükenen ürünler</div>
+          <div className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">WOLVOX’un raporladığı çıkış miktarı ve mevcut kullanılabilir stok</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 dark:bg-slate-700/50 dark:text-slate-400">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">Ürün</th>
+                <th className="px-4 py-3 text-right font-medium">Günlük çıkış</th>
+                <th className="px-4 py-3 text-right font-medium">Stok</th>
+                <th className="px-4 py-3 text-right font-medium">Tahmini bitiş</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+              {displayed.map(row => (
+                <tr key={row.externalProductId}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900 dark:text-slate-100">{row.productName}</div>
+                    <div className="text-[11px] text-gray-400">{row.category ?? 'Kategorisiz'}</div>
+                  </td>
+                  <td className="px-4 py-3 text-right">{row.averageDailyUnitsOut.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-3 text-right">{row.stockAvailable.toLocaleString('tr-TR')}</td>
+                  <td className="px-4 py-3 text-right">
+                    {row.estimatedDaysToStockout == null
+                      ? <span className="text-gray-400">Hareket yok</span>
+                      : <span className={row.estimatedDaysToStockout <= 30 ? 'font-semibold text-red-600' : ''}>
+                          {Math.ceil(row.estimatedDaysToStockout)} gün
+                        </span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {channelSummary.some(row => row.documents > 0) && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <div className="text-sm font-semibold text-gray-900 dark:text-slate-100">Satış kanalı dağılımı</div>
+          <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {channelSummary.map(row => (
+              <div key={row.channel} className="rounded-lg bg-gray-50 p-3 dark:bg-slate-700/50">
+                <div className="text-xs text-gray-500 dark:text-slate-400">{channelLabels[row.channel]}</div>
+                <div className="mt-1 font-semibold text-gray-900 dark:text-slate-100">{fmt(row.netSales)}</div>
+                <div className="text-[11px] text-gray-400">{row.documents} belge</div>
+              </div>
+            ))}
+          </div>
+          {channelSummary.some(row => row.channel === 'unknown' && row.documents > 0) && (
+            <p className="mt-3 text-xs text-amber-600 dark:text-amber-300">
+              Eşlenmemiş belgeler tahmin edilmedi; depo/şube/seri kuralı tanımlandığında doğru kanala taşınacak.
+            </p>
+          )}
+        </div>
+      )}
+      {costChanges.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+          <div className="border-b border-gray-100 px-4 py-3 dark:border-slate-700">
+            <div className="text-sm font-semibold text-gray-900 dark:text-slate-100">Son alış maliyeti değişimleri</div>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-slate-700">
+            {costChanges.slice(0, 10).map(row => (
+              <div key={row.externalProductId} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                <span className="min-w-0 truncate text-gray-800 dark:text-slate-200">{row.productName}</span>
+                <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-400">
+                  {fmt(row.previousCost)} → {fmt(row.currentCost)}
+                  <strong className={`ml-2 ${row.changePercent > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {row.changePercent > 0 ? '+' : ''}{row.changePercent.toFixed(1)}%
+                  </strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -656,14 +810,16 @@ function PlatformTab({ rows }: { rows: ReportRow[] }) {
 
 function KpiCard({ label, value, sub, color }: {
   label: string
-  value: number
+  value: number | string
   sub?: string
   color: string
 }) {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
       <div className="text-xs text-gray-500 dark:text-slate-400 mb-1">{label}</div>
-      <div className={`text-2xl font-semibold ${color}`}>{value.toLocaleString('tr-TR')}</div>
+      <div className={`text-2xl font-semibold ${color}`}>
+        {typeof value === 'number' ? value.toLocaleString('tr-TR') : value}
+      </div>
       {sub && <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{sub}</div>}
     </div>
   )

@@ -31,6 +31,8 @@ export interface Database {
           sku: string
           product_name: string
           brand: string | null
+          manufacturer_code: string | null
+          product_type: string | null
           category: string | null
           external_source: string | null
           external_id: string | null
@@ -51,6 +53,20 @@ export interface Database {
           currency: string
           is_active: boolean
           market_tracking_override: boolean | null
+          ecommerce_enabled: boolean
+          ecommerce_price: number | null
+          ecommerce_commission_rate: number
+          ecommerce_payment_fee_rate: number
+          ecommerce_shipping_cost: number
+          ecommerce_packaging_cost: number
+          ecommerce_target_margin_rate: number
+          ecommerce_price_floor: number | null
+          ecommerce_price_ceiling: number | null
+          safety_stock: number
+          ecommerce_title: string | null
+          ecommerce_description: string | null
+          ecommerce_image_urls: string[]
+          ecommerce_updated_at: string | null
           created_at: string
           updated_at: string
           last_analyzed_at: string | null
@@ -59,7 +75,7 @@ export interface Database {
           last_attempt_failure_reason: string | null
           last_attempt_error: string | null
         }
-        Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at' | 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override'> & Partial<Pick<Database['public']['Tables']['products']['Row'], 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override'>>
+        Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at' | 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override' | 'manufacturer_code' | 'product_type' | 'ecommerce_enabled' | 'ecommerce_price' | 'ecommerce_commission_rate' | 'ecommerce_payment_fee_rate' | 'ecommerce_shipping_cost' | 'ecommerce_packaging_cost' | 'ecommerce_target_margin_rate' | 'ecommerce_price_floor' | 'ecommerce_price_ceiling' | 'safety_stock' | 'ecommerce_title' | 'ecommerce_description' | 'ecommerce_image_urls' | 'ecommerce_updated_at'> & Partial<Pick<Database['public']['Tables']['products']['Row'], 'external_source' | 'external_id' | 'barcode' | 'stock_quantity' | 'stock_unit' | 'external_updated_at' | 'last_synced_at' | 'market_tracking_override' | 'manufacturer_code' | 'product_type' | 'ecommerce_enabled' | 'ecommerce_price' | 'ecommerce_commission_rate' | 'ecommerce_payment_fee_rate' | 'ecommerce_shipping_cost' | 'ecommerce_packaging_cost' | 'ecommerce_target_margin_rate' | 'ecommerce_price_floor' | 'ecommerce_price_ceiling' | 'safety_stock' | 'ecommerce_title' | 'ecommerce_description' | 'ecommerce_image_urls' | 'ecommerce_updated_at'>>
         Update: Partial<Database['public']['Tables']['products']['Insert']>
       }
       price_analyses: {

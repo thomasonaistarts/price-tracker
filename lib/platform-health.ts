@@ -1,4 +1,5 @@
 import type { PlatformScrapeHealth } from '@/lib/scrapers'
+import { estimateScrapeUsage, type ScrapeUsageEstimate } from './scrape-observability.ts'
 
 export const HEALTH_PLATFORMS = ['Hepsiburada', 'N11', 'PTTAvm', 'İdefix', 'Trendyol'] as const
 
@@ -21,6 +22,58 @@ export interface PlatformHealthSummary {
   acceptedCount: number
   averageDurationMs: number
   lastSeenAt: string | null
+}
+
+export interface ScrapeUsageSummary extends ScrapeUsageEstimate {
+  analysisAttempts: number
+  successfulPlatformCalls: number
+  estimatedDailyCreditLimit: number | null
+  estimatedCreditUsagePercent: number | null
+}
+
+export function summarizeScrapeUsage(
+  rows: AnalysisHealthRow[],
+  estimatedDailyCreditLimit?: number | null,
+): ScrapeUsageSummary {
+  const total: ScrapeUsageEstimate = {
+    scraperApiCredits: 0,
+    apifyRuns: 0,
+    attemptedPlatforms: 0,
+    acceptedSources: 0,
+    timeoutCount: 0,
+    providerErrorCount: 0,
+  }
+  let successfulPlatformCalls = 0
+
+  for (const row of rows) {
+    if (!Array.isArray(row.scraper_health)) continue
+    const health = row.scraper_health as PlatformScrapeHealth[]
+    const estimate = estimateScrapeUsage(health)
+    total.scraperApiCredits += estimate.scraperApiCredits
+    total.apifyRuns += estimate.apifyRuns
+    total.attemptedPlatforms += estimate.attemptedPlatforms
+    total.acceptedSources += estimate.acceptedSources
+    total.timeoutCount += estimate.timeoutCount
+    total.providerErrorCount += estimate.providerErrorCount
+    successfulPlatformCalls += health.filter(
+      item => item.attempted !== false && (item.status === 'success' || item.status === 'empty'),
+    ).length
+  }
+
+  const limit = Number.isFinite(estimatedDailyCreditLimit)
+    && Number(estimatedDailyCreditLimit) > 0
+    ? Number(estimatedDailyCreditLimit)
+    : null
+
+  return {
+    ...total,
+    analysisAttempts: rows.length,
+    successfulPlatformCalls,
+    estimatedDailyCreditLimit: limit,
+    estimatedCreditUsagePercent: limit
+      ? Math.min(100, (total.scraperApiCredits / limit) * 100)
+      : null,
+  }
 }
 
 export function summarizePlatformHealth(rows: AnalysisHealthRow[]): PlatformHealthSummary[] {

@@ -6,6 +6,8 @@ import type { Product } from '@/types/database'
 import PlatformLogo from '@/components/ui/PlatformLogo'
 import ProductPriceHistory from '@/components/products/ProductPriceHistory'
 import ProductProfitability from '@/components/products/ProductProfitability'
+import ProductIdentityEditor from '@/components/products/ProductIdentityEditor'
+import ProductEcommercePricing from '@/components/products/ProductEcommercePricing'
 import { downloadExcel } from '@/lib/exportExcel'
 import { sourceDecisionKey, type SourceDecisionRule, type SourceDecisionValue } from '@/lib/source-decisions'
 import {
@@ -887,6 +889,22 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                               product={p}
                               marketMean={analysis?.market_mean ?? null}
                               onUpdated={(values) => setLocalProducts(current => current.map(item => item.id === p.id ? { ...item, ...values } : item))}
+                            />
+                            <ProductIdentityEditor
+                              productId={p.id}
+                              initialBrand={p.brand}
+                              initialManufacturerCode={p.manufacturer_code}
+                              initialProductType={p.product_type}
+                              onUpdated={(identity) => setLocalProducts(current => current.map(item =>
+                                item.id === p.id ? { ...item, ...identity } : item,
+                              ))}
+                            />
+                            <ProductEcommercePricing
+                              product={p}
+                              marketMean={analysis?.market_mean ?? null}
+                              onUpdated={(values) => setLocalProducts(current => current.map(item =>
+                                item.id === p.id ? { ...item, ...values } : item,
+                              ))}
                             />
                             {analysis && <ProductPriceHistory key={p.id + '-' + p.our_price} productId={p.id} />}
                           </td>

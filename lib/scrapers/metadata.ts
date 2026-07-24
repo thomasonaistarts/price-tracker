@@ -1,4 +1,4 @@
-import type { SourceCommerceMetadata } from './types'
+import type { SourceCommerceMetadata } from './types.ts'
 
 type UnknownRecord = Record<string, unknown>
 

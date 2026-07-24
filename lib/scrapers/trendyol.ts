@@ -1,6 +1,6 @@
-import type { ScrapedPrice } from './types'
-import { extractTrendyolMetadata } from './metadata'
-import { assertScraperResponse } from './proxy'
+import type { ScrapedPrice } from './types.ts'
+import { extractTrendyolMetadata } from './metadata.ts'
+import { assertScraperResponse } from './proxy.ts'
 
 // Apify "Trendyol Scraper | All-In-One" — fatihtahta/trendyol-scraper
 // Actor ID: AoPP8ru9uKws5t80G
