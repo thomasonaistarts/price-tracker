@@ -5,6 +5,9 @@ import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 import { getSourceDecisions } from '@/lib/source-decisions'
+import { retryCooldownHours } from '@/lib/analysis-outcome'
+import { getVerifiedSourceMemory, rememberProductSources } from '@/lib/source-memory'
+import { saveProductReviewCandidates } from '@/lib/review-candidates'
 
 export const maxDuration = 300
 
@@ -50,7 +53,10 @@ export async function POST(
   const categoryThresholds = Object.fromEntries(
     (thresholds ?? []).map((item: any) => [item.category, Number(item.threshold_percent)]),
   )
-  const sourceDecisions = await getSourceDecisions(supabase, userId, [product.id])
+  const [rememberedSources, sourceDecisions] = await Promise.all([
+    getVerifiedSourceMemory(supabase, userId, [product.id]),
+    getSourceDecisions(supabase, userId, [product.id]),
+  ])
 
   const result = await analyzeProduct(product, {
     thresholdPercent: settings.default_threshold_percent,
@@ -65,8 +71,14 @@ export async function POST(
     upperOutlierPct: settings.outlier_upper_pct,
     lowerOutlierPct: settings.outlier_filter_pct,
     activePlatforms: settings.active_platforms,
-    sourceDecisions,
+    // Elle verilen karar son sözü söyler; bu nedenle URL belleğinden sonra eklenir.
+    sourceDecisions: [...rememberedSources, ...sourceDecisions],
   })
+  await saveProductReviewCandidates(supabase, {
+    productId: product.id,
+    userId,
+    candidates: result.review_candidates,
+  }).catch(() => undefined)
 
   if (result.technical_failure) {
     const attemptedAt = new Date().toISOString()
@@ -76,8 +88,8 @@ export async function POST(
         userId,
         status: 'failed',
         attemptedAt,
-        failureReason: 'no_sources',
-        errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+        failureReason: result.outcome,
+        errorMessage: `Analiz tamamlanamadı: ${result.outcome}`,
         scraperHealth: result.scraper_health,
       })
     } catch {
@@ -86,8 +98,10 @@ export async function POST(
 
     return NextResponse.json(
       {
-        error: 'Pazar yerlerinden fiyat alınamadı. Eski başarılı analiz korundu; lütfen tekrar deneyin.',
+        error: 'Güvenilir yeni piyasa verisi üretilemedi. Eski başarılı analiz korundu.',
+        outcome: result.outcome,
         retryable: true,
+        retry_after_hours: retryCooldownHours(result.outcome),
         attempted_at: attemptedAt,
       },
       { status: 503 },
@@ -134,8 +148,19 @@ export async function POST(
     userId,
     status: 'success',
     attemptedAt: now,
+    failureReason: result.outcome === 'insufficient_sources' ? result.outcome : null,
     scraperHealth: result.scraper_health,
   }).catch(() => undefined)
+  await rememberProductSources(supabase, {
+    productId: product.id,
+    userId,
+    sources: result.sources,
+  }).catch(() => undefined)
 
-  return NextResponse.json({ success: true, alert: result.alert, price_diff_percent: result.price_diff_percent })
+  return NextResponse.json({
+    success: true,
+    outcome: result.outcome,
+    alert: result.alert,
+    price_diff_percent: result.price_diff_percent,
+  })
 }

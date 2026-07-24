@@ -17,6 +17,8 @@ export interface PlatformHealthSummary {
   errors: number
   quotaErrors: number
   resultCount: number
+  matchedCount: number
+  acceptedCount: number
   averageDurationMs: number
   lastSeenAt: string | null
 }
@@ -32,6 +34,8 @@ export function summarizePlatformHealth(rows: AnalysisHealthRow[]): PlatformHeal
     errors: 0,
     quotaErrors: 0,
     resultCount: 0,
+    matchedCount: 0,
+    acceptedCount: 0,
     averageDurationMs: 0,
     lastSeenAt: null as string | null,
     totalDurationMs: 0,
@@ -43,10 +47,13 @@ export function summarizePlatformHealth(rows: AnalysisHealthRow[]): PlatformHeal
     for (const rawHealth of row.scraper_health) {
       const health = rawHealth as Partial<PlatformScrapeHealth>
       if (!HEALTH_PLATFORMS.includes(health.platform as typeof HEALTH_PLATFORMS[number])) continue
+      if (health.attempted === false) continue
 
       const summary = summaries.get(health.platform as typeof HEALTH_PLATFORMS[number])!
       summary.samples += 1
       summary.resultCount += Number(health.resultCount) || 0
+      summary.matchedCount += Number(health.matchedCount) || 0
+      summary.acceptedCount += Number(health.acceptedCount) || 0
       summary.totalDurationMs += Number(health.durationMs) || 0
       if (health.status === 'success') summary.successes += 1
       else if (health.status === 'empty') summary.empty += 1
@@ -66,7 +73,9 @@ export function summarizePlatformHealth(rows: AnalysisHealthRow[]): PlatformHeal
       ? 'no_data'
       : summary.quotaErrors > 0
         ? 'quota_exhausted'
-        : summary.successes > 0 && hardFailures / summary.samples <= 0.2
+        : summary.successes > 0
+          && hardFailures / summary.samples <= 0.2
+          && (summary.resultCount === 0 || summary.acceptedCount > 0)
         ? 'healthy'
         : summary.successes > 0 || summary.empty > 0
           ? 'warning'

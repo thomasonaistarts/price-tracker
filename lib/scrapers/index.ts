@@ -3,10 +3,18 @@ import { scrapeN11 } from './n11'
 import { scrapePttavm } from './pttavm'
 import { scrapeIdefix } from './idefix'
 import { scrapeTrendyol } from './trendyol'
-import { matchProduct, calcUnitPrice, type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS } from './similarity'
+import {
+  matchProduct,
+  calcUnitPrice,
+  isAutomaticMatchEligible,
+  type ConfidenceThresholds,
+  DEFAULT_CONFIDENCE_THRESHOLDS,
+} from './similarity'
 import type { ScrapedPrice } from './types'
 import { ScraperProxyError, type ScraperProxyErrorCode } from './proxy'
 import { sourceDecisionKey, type SourceDecisionRule } from '@/lib/source-decisions'
+import { filterLowPriceOutliers, selectBestOfferPerPlatform } from './selection'
+import { runAbortable, runInNamedQueue, runSequentialUntil } from './execution'
 
 export type { ScrapedPrice }
 
@@ -20,14 +28,19 @@ export interface ScrapeOptions {
   lowerOutlierPct?: number
   sourceDecisions?: SourceDecisionRule[]
   onHealth?: (health: PlatformScrapeHealth[]) => void
+  onReviewCandidates?: (candidates: ScrapedPrice[]) => void
 }
 
 export interface PlatformScrapeHealth {
   platform: SupportedPlatform
   status: 'success' | 'empty' | 'timeout' | 'error'
   resultCount: number
+  matchedCount?: number
+  acceptedCount?: number
+  outOfStockCount?: number
   durationMs: number
   errorCode?: ScraperProxyErrorCode
+  attempted?: boolean
 }
 
 // Platform başına timeout — render gerektiren Hepsiburada daha uzun
@@ -39,46 +52,96 @@ const TIMEOUT = {
   trendyol:    60_000,  // Apify actor soğuk başlangıçta 35 saniyeyi aşabiliyor
 }
 
-class ScraperTimeoutError extends Error {}
-
-async function runScraper(
+export async function runScraper(
   platform: SupportedPlatform,
-  scraper: () => Promise<ScrapedPrice[]>,
+  scraper: (signal: AbortSignal) => Promise<ScrapedPrice[]>,
   timeoutMs: number,
 ): Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }> {
-  const startedAt = Date.now()
-  let timer: ReturnType<typeof setTimeout> | undefined
+  const execution = await runAbortable(scraper, timeoutMs)
 
-  try {
-    const items = await Promise.race([
-      scraper(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new ScraperTimeoutError()), timeoutMs)
-      }),
-    ])
+  if (execution.outcome === 'success') {
+    const items = execution.value
     return {
       items,
       health: {
         platform,
         status: items.length > 0 ? 'success' : 'empty',
         resultCount: items.length,
-        durationMs: Date.now() - startedAt,
+        durationMs: execution.durationMs,
       },
     }
-  } catch (error) {
-    return {
-      items: [],
+  }
+
+  const error = execution.error
+  return {
+    items: [],
       health: {
         platform,
-        status: error instanceof ScraperTimeoutError ? 'timeout' : 'error',
-        resultCount: 0,
-        durationMs: Date.now() - startedAt,
-        errorCode: error instanceof ScraperProxyError ? error.code : undefined,
-      },
-    }
-  } finally {
-    if (timer) clearTimeout(timer)
+        status: execution.outcome === 'timeout'
+          || (error instanceof ScraperProxyError && error.code === 'provider_timeout')
+          ? 'timeout'
+          : 'error',
+      resultCount: 0,
+      durationMs: execution.durationMs,
+      errorCode: error instanceof ScraperProxyError ? error.code : undefined,
+    },
   }
+}
+
+interface ScraperJob {
+  platform: SupportedPlatform
+  run: () => Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }>
+}
+
+const SCRAPER_API_QUOTA_COOLDOWN_MS = 5 * 60 * 1000
+let scraperApiQuotaBlockedUntil = 0
+
+function skippedForOpenQuotaCircuit(
+  jobs: ScraperJob[],
+): { items: ScrapedPrice[]; health: PlatformScrapeHealth }[] {
+  return jobs.map(job => ({
+    items: [],
+    health: {
+      platform: job.platform,
+      status: 'error',
+      resultCount: 0,
+      durationMs: 0,
+      errorCode: 'quota_exhausted',
+      attempted: false,
+    },
+  }))
+}
+
+export async function runScraperApiJobsSequentially(
+  jobs: ScraperJob[],
+): Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }[]> {
+  return runInNamedQueue('scraperapi', async () => {
+    if (Date.now() < scraperApiQuotaBlockedUntil) {
+      return skippedForOpenQuotaCircuit(jobs)
+    }
+
+    // ScraperAPI aynı hesabı dört pazaryeri için kullanıyor. Kota bittiğinde
+    // kalan sitelere istek atmak sonucu değiştirmez, yalnızca süre ve yük üretir.
+    const attemptedResults = await runSequentialUntil(
+      jobs.map(job => job.run),
+      result => result.health.errorCode === 'quota_exhausted',
+    )
+    const quotaExhausted = attemptedResults.some(
+      result => result.health.errorCode === 'quota_exhausted'
+    )
+
+    if (!quotaExhausted) return attemptedResults
+
+    scraperApiQuotaBlockedUntil = Date.now() + SCRAPER_API_QUOTA_COOLDOWN_MS
+    return [
+      ...attemptedResults,
+      ...skippedForOpenQuotaCircuit(jobs.slice(attemptedResults.length)),
+    ]
+  })
+}
+
+export async function runApifyJob<T>(job: () => Promise<T>): Promise<T> {
+  return runInNamedQueue('apify', job)
 }
 
 export { type ConfidenceThresholds, DEFAULT_CONFIDENCE_THRESHOLDS }
@@ -90,19 +153,54 @@ export async function scrapeAllPlatforms(
   const thresholds = options.thresholds ?? DEFAULT_CONFIDENCE_THRESHOLDS
   const searchQuery = options.searchQuery?.trim() || query
   const active = new Set(options.activePlatforms ?? SUPPORTED_PLATFORMS)
-  const jobs: Promise<{ items: ScrapedPrice[]; health: PlatformScrapeHealth }>[] = []
-  if (active.has('Hepsiburada')) jobs.push(runScraper('Hepsiburada', () => scrapeHepsiburada(searchQuery), TIMEOUT.hepsiburada))
-  if (active.has('N11')) jobs.push(runScraper('N11', () => scrapeN11(searchQuery), TIMEOUT.n11))
-  if (active.has('PTTAvm')) jobs.push(runScraper('PTTAvm', () => scrapePttavm(searchQuery), TIMEOUT.pttavm))
-  if (active.has('İdefix')) jobs.push(runScraper('İdefix', () => scrapeIdefix(searchQuery), TIMEOUT.idefix))
-  if (active.has('Trendyol')) jobs.push(runScraper('Trendyol', () => scrapeTrendyol(searchQuery), TIMEOUT.trendyol))
+  const scraperApiJobs: ScraperJob[] = []
+  // Canary ölçümlerinde İdefix/PTTAvm daha hızlı ve daha verimli sonuç verdi.
+  // Yavaş render isteyen Hepsiburada en sona bırakılır; çağrılar yine sıralıdır.
+  if (active.has('İdefix')) scraperApiJobs.push(
+    {
+      platform: 'İdefix',
+      run: () => runScraper('İdefix', signal => scrapeIdefix(searchQuery, signal), TIMEOUT.idefix),
+    }
+  )
+  if (active.has('PTTAvm')) scraperApiJobs.push(
+    {
+      platform: 'PTTAvm',
+      run: () => runScraper('PTTAvm', signal => scrapePttavm(searchQuery, signal), TIMEOUT.pttavm),
+    }
+  )
+  if (active.has('N11')) scraperApiJobs.push(
+    {
+      platform: 'N11',
+      run: () => runScraper('N11', signal => scrapeN11(searchQuery, signal), TIMEOUT.n11),
+    }
+  )
+  if (active.has('Hepsiburada')) scraperApiJobs.push(
+    {
+      platform: 'Hepsiburada',
+      run: () => runScraper('Hepsiburada', signal => scrapeHepsiburada(searchQuery, signal), TIMEOUT.hepsiburada),
+    }
+  )
 
-  const platformResults = await Promise.all(jobs)
-  options.onHealth?.(platformResults.map((result) => result.health))
+  // ScraperAPI çağrıları kendi içinde sırayla çalışır. Ayrı sağlayıcı olan
+  // Trendyol/Apify bu kuyrukla eş zamanlı ilerleyebilir.
+  const scraperApiPromise = runScraperApiJobsSequentially(scraperApiJobs)
+  const trendyolPromise = active.has('Trendyol')
+    ? runApifyJob(() =>
+        runScraper('Trendyol', signal => scrapeTrendyol(searchQuery, signal), TIMEOUT.trendyol)
+      )
+    : null
 
+  const [scraperApiResults, trendyolResult] = await Promise.all([
+    scraperApiPromise,
+    trendyolPromise,
+  ])
+  const platformResults = trendyolResult
+    ? [...scraperApiResults, trendyolResult]
+    : scraperApiResults
   const all = platformResults.flatMap((result) => result.items)
 
   const results: ScrapedPrice[] = []
+  const reviewResults: ScrapedPrice[] = []
   const decisionMap = new Map(
     (options.sourceDecisions ?? []).map((decision) => [
       sourceDecisionKey(decision.platform, decision.source_url),
@@ -116,9 +214,6 @@ export async function scrapeAllPlatforms(
 
     const mr = matchProduct(query, item.product_name, thresholds)
     const manuallyApproved = decision === 'approved'
-
-    // Otomatik eşleştirici reddettiyse yalnızca manuel onay bu kararı geçersiz kılabilir.
-    if (!manuallyApproved && mr.confidence === 'rejected') continue
 
     const automaticConfidence = mr.confidence === 'rejected' ? 'low' : mr.confidence
     const enriched: ScrapedPrice = {
@@ -147,43 +242,40 @@ export async function scrapeAllPlatforms(
       }
     }
 
+    // Düşük güvenli adaylar piyasa hesabına hiçbir zaman girmez. Yine de kullanıcı
+    // doğru ürünü elle onaylayabilsin diye ayrı bir inceleme listesinde tutulur.
+    if (!manuallyApproved && !isAutomaticMatchEligible(mr.confidence)) {
+      if (mr.confidence === 'low') reviewResults.push(enriched)
+      continue
+    }
+
     results.push(enriched)
   }
 
-  // Her site × güven seviyesi için sadece en ucuz ürünü tut
-  const deduped = cheapestPerSiteAndConfidence(results)
+  // Her pazaryerinden yalnızca en güvenilir ve stokta olan teklifi tut.
+  const selected = selectBestOfferPerPlatform(results)
+  const reviewCandidates = selectBestOfferPerPlatform(reviewResults)
+  options.onReviewCandidates?.(reviewCandidates)
 
-  // Piyasa medyanının %50'sinin altındaki fiyatları at (yanlış ürün eşleşmesi temizliği)
-  return filterPriceOutliers(deduped, options.lowerOutlierPct ?? 50)
-}
-
-/**
- * Piyasa medyanının %50'sinden düşük fiyatları eler.
- * Örnek: medyan ₺12.000 ise → ₺6.000 altı fiyatlar atılır.
- * Çok az sonuç varsa (<3) filtreleme uygulanmaz.
- */
-function filterPriceOutliers(items: ScrapedPrice[], lowerOutlierPct: number): ScrapedPrice[] {
-  if (items.length < 3) return items
-  const sorted = [...items].map(i => i.comparisonPrice ?? i.price).sort((a, b) => a - b)
-  const median = sorted[Math.floor(sorted.length / 2)]
-  const floor = median * Math.min(100, Math.max(1, lowerOutlierPct)) / 100
-  return items.filter(i => i.manualDecision === 'approved' || (i.comparisonPrice ?? i.price) >= floor)
-}
-
-/**
- * site + confidence kombinasyonu başına en düşük fiyatlı ürünü döndürür.
- * Örnek: N11'de 3 HIGH sonuç varsa → en ucuz 1 tanesi kalır.
- */
-function cheapestPerSiteAndConfidence(items: ScrapedPrice[]): ScrapedPrice[] {
-  const map = new Map<string, ScrapedPrice>()
-  for (const item of items) {
-    const key = item.manualDecision === 'approved'
-      ? `${item.site}|approved|${item.url}`
-      : `${item.site}|${item.confidence ?? 'high'}`
-    const existing = map.get(key)
-    if (!existing || item.price < existing.price) {
-      map.set(key, item)
+  // Şüpheli derecede düşük fiyatları platform seçimi sonrasında temizle.
+  const accepted = filterLowPriceOutliers(selected, options.lowerOutlierPct ?? 50)
+  const matchedByPlatform = new Map<string, number>()
+  const acceptedByPlatform = new Map<string, number>()
+  const outOfStockByPlatform = new Map<string, number>()
+  for (const item of [...results, ...reviewCandidates]) {
+    matchedByPlatform.set(item.site, (matchedByPlatform.get(item.site) ?? 0) + 1)
+    if (item.inStock === false) {
+      outOfStockByPlatform.set(item.site, (outOfStockByPlatform.get(item.site) ?? 0) + 1)
     }
   }
-  return Array.from(map.values())
+  for (const item of accepted) {
+    acceptedByPlatform.set(item.site, (acceptedByPlatform.get(item.site) ?? 0) + 1)
+  }
+  options.onHealth?.(platformResults.map(({ health }) => ({
+    ...health,
+    matchedCount: matchedByPlatform.get(health.platform) ?? 0,
+    acceptedCount: acceptedByPlatform.get(health.platform) ?? 0,
+    outOfStockCount: outOfStockByPlatform.get(health.platform) ?? 0,
+  })))
+  return accepted
 }

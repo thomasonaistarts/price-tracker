@@ -20,6 +20,10 @@ export const updateUserSchema = z.object({
 
 export const productSchema = z.object({
   sku: z.coerce.string().min(1, 'SKU zorunlu'),
+  barcode: z.preprocess((val) => {
+    if (val === null || val === undefined || String(val).trim() === '') return undefined
+    return String(val).trim()
+  }, z.string().optional()),
   product_name: z.coerce.string().min(1, 'Ürün adı zorunlu'),
   brand: z.coerce.string().optional(),
   category: z.coerce.string().optional(),

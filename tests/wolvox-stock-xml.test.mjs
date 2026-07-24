@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mapWolvoxStockRow, parseWolvoxStockXml } from '../lib/integrations/wolvox-stock-xml.ts'
+import {
+  mapWolvoxStockRow,
+  parseWolvoxStockXml,
+  selectWolvoxCategory,
+} from '../lib/integrations/wolvox-stock-xml.ts'
 
 const fixture = `<?xml version="1.0" encoding="UTF-8"?>
 <report>
@@ -75,4 +79,14 @@ test('GTIN is used only when the primary WOLVOX barcode is empty', () => {
 test('malformed and empty SDK documents are rejected before staging', () => {
   assert.throws(() => parseWolvoxStockXml('<not-wolvox />'), /invalid_root/)
   assert.throws(() => parseWolvoxStockXml('<report><table /></report>'), /_empty/)
+})
+
+test('barcode-like group values cannot become product categories', () => {
+  assert.equal(selectWolvoxCategory({
+    STOKKODU: 'ST03576',
+    BARKODU: '9786256611825',
+    GRUBU: '9786256611825',
+    ARA_GRUBU: 'KİTAP',
+    ALT_GRUBU: 'BOYAMA',
+  }), 'KİTAP')
 })

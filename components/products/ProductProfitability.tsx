@@ -3,6 +3,10 @@
 import { useMemo, useState } from 'react'
 import type { Product } from '@/types/database'
 import { recommendPrice } from '@/lib/price-recommendation'
+import {
+  priceChangePercent,
+  requiresLargePriceChangeConfirmation,
+} from '@/lib/price-change-safety'
 
 interface Props {
   product: Product
@@ -116,10 +120,23 @@ export default function ProductProfitability({ product, marketMean, onUpdated }:
 
   async function applyRecommendation() {
     if (recommendation.status !== 'ready' || recommendation.recommendedPrice == null) return
+    const changePercent = priceChangePercent(product.our_price, recommendation.recommendedPrice)
     const approved = confirm(
       'Fiyatlaa hedef fiyatı ' + money(product.our_price) + ' → ' + money(recommendation.recommendedPrice) + ' olarak değişecek. Bu aşamada Wolvox ve e-ticaret fiyatı değişmeyecek. Onaylıyor musunuz?',
     )
     if (!approved) return
+    const largeChangeConfirmed = requiresLargePriceChangeConfirmation(
+      product.our_price,
+      recommendation.recommendedPrice,
+    )
+      ? confirm(
+          `Bu değişiklik %${changePercent.toFixed(2)} oranında. %10 güvenlik sınırını aşıyor. İkinci kez onaylıyor musunuz?`,
+        )
+      : false
+    if (
+      requiresLargePriceChangeConfirmation(product.our_price, recommendation.recommendedPrice)
+      && !largeChangeConfirmed
+    ) return
 
     setApplying(true)
     setError(null)
@@ -131,6 +148,7 @@ export default function ProductProfitability({ product, marketMean, onUpdated }:
         body: JSON.stringify({
           expected_price: product.our_price,
           expected_recommended_price: recommendation.recommendedPrice,
+          confirm_large_change: largeChangeConfirmed,
         }),
       })
       const data = await response.json().catch(() => null)

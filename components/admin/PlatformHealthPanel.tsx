@@ -71,8 +71,12 @@ export default function PlatformHealthPanel({ summaries }: { summaries: Platform
                   <dd className="font-medium text-gray-700 dark:text-slate-300">{summary.successes}/{summary.samples}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-400 dark:text-slate-500">Sonuç</dt>
-                  <dd className="font-medium text-gray-700 dark:text-slate-300">{summary.resultCount}</dd>
+                  <dt className="text-gray-400 dark:text-slate-500">Ham / eşleşen</dt>
+                  <dd className="font-medium text-gray-700 dark:text-slate-300">{summary.resultCount}/{summary.matchedCount}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-400 dark:text-slate-500">Kabul edilen</dt>
+                  <dd className="font-medium text-gray-700 dark:text-slate-300">{summary.acceptedCount}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-gray-400 dark:text-slate-500">Ort. süre</dt>

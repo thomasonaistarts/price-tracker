@@ -45,6 +45,11 @@ interface LatestAnalysis {
   notes: string[] | null
 }
 
+type ProductWithReviewCandidates = Product & {
+  last_review_candidates?: Source[] | null
+  last_review_candidates_at?: string | null
+}
+
 const CONF_GROUPS = [
   { key: 'exact'  as const, label: '⭐ Tam eşleşme',    badge: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',    border: 'border-amber-200 hover:border-amber-400 dark:border-amber-800 dark:hover:border-amber-600'   },
   { key: 'high'   as const, label: '✓ Yüksek eşleşme', badge: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700',    border: 'border-green-100 hover:border-green-300 dark:border-green-900 dark:hover:border-green-700'   },
@@ -221,7 +226,7 @@ function ProductSourceGroups({
 }
 
 interface Props {
-  products: Product[]
+  products: ProductWithReviewCandidates[]
   latestAnalyses: LatestAnalysis[]
   sourceDecisions: SourceDecisionRule[]
 }
@@ -249,7 +254,7 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
   const [analysisError, setAnalysisError] = useState<{ id: string; message: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
-  const [localProducts, setLocalProducts] = useState<Product[]>(products)
+  const [localProducts, setLocalProducts] = useState<ProductWithReviewCandidates[]>(products)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [localDecisions, setLocalDecisions] = useState<SourceDecisionRule[]>(sourceDecisions)
   const [decisionSavingKey, setDecisionSavingKey] = useState<string | null>(null)
@@ -358,7 +363,10 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
     const matchesAlert = alertFilter.length === 0 ||
       (analysis != null && alertFilter.includes(analysis.alert as AlertKey))
 
-    const sources: Source[] = Array.isArray(analysis?.sources) ? analysis.sources : []
+    const sources: Source[] = [
+      ...(Array.isArray(analysis?.sources) ? analysis.sources : []),
+      ...(Array.isArray(p.last_review_candidates) ? p.last_review_candidates : []),
+    ]
     const matchesConf = confidenceFilter.length === 0 ||
       confidenceFilter.some(cf => sources.some(s => (s.confidence ?? 'high') === cf))
 
@@ -691,7 +699,11 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                   const analysis = analysisMap[p.id]
                   const fmt = (n: number) => n.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })
                   const isExpanded = expandedRow === p.id
-                  const sources: Source[] = Array.isArray(analysis?.sources) ? analysis.sources : []
+                  const acceptedSources: Source[] = Array.isArray(analysis?.sources) ? analysis.sources : []
+                  const reviewCandidates: Source[] = Array.isArray(p.last_review_candidates)
+                    ? p.last_review_candidates
+                    : []
+                  const sources: Source[] = [...acceptedSources, ...reviewCandidates]
                   const analysisAgeDays = analysis
                     ? Math.floor((Date.now() - new Date(analysis.run_at).getTime()) / (24 * 60 * 60 * 1000))
                     : null
@@ -775,7 +787,7 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                         </td>
                         <td className="px-4 py-3 text-center">
                           {analysis?.sources_count > 0 ? (
-                            <ConfidenceDots sources={sources} />
+                            <ConfidenceDots sources={acceptedSources} />
                           ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-center text-xs text-gray-400 dark:text-slate-500">
@@ -844,15 +856,22 @@ export default function ProductsClient({ products, latestAnalyses, sourceDecisio
                         <tr key={`${p.id}-detail`} className="bg-blue-50 dark:bg-blue-900/20">
                           <td colSpan={10} className="px-6 py-4">
                             {sources.length > 0 && (
-                              <ProductSourceGroups
-                                productId={p.id}
-                                sources={sources}
-                                fmt={fmt}
-                                decisionMap={decisionMap}
-                                savingKey={decisionSavingKey}
-                                onDecision={handleSourceDecision}
-                                onClear={handleClearSourceDecision}
-                              />
+                              <>
+                                {reviewCandidates.length > 0 && (
+                                  <p className="mb-2 text-xs font-medium text-orange-600 dark:text-orange-300">
+                                    {reviewCandidates.length} düşük güvenli aday fiyat hesabına alınmadı; onaylanırsa sonraki analizde kullanılacak.
+                                  </p>
+                                )}
+                                <ProductSourceGroups
+                                  productId={p.id}
+                                  sources={sources}
+                                  fmt={fmt}
+                                  decisionMap={decisionMap}
+                                  savingKey={decisionSavingKey}
+                                  onDecision={handleSourceDecision}
+                                  onClear={handleClearSourceDecision}
+                                />
+                              </>
                             )}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               {analysis?.alert_reason && (

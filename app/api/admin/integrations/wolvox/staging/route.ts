@@ -14,6 +14,7 @@ import {
   summarizeWolvoxStagingDecisions,
 } from '@/lib/integrations/wolvox-staging-decisions'
 import { buildWolvoxProductDrafts } from '@/lib/integrations/wolvox-product-draft'
+import { assessWolvoxCatalogQuality } from '@/lib/integrations/wolvox-data-quality'
 
 const PAGE_SIZE = 1000
 const MAX_CATALOG_ROWS = 10000
@@ -157,6 +158,7 @@ export async function GET(req: NextRequest) {
       connection,
       total: preview.length,
       summary: summarizeWolvoxMatches(preview),
+      data_quality: assessWolvoxCatalogQuality(staging),
       preview: preview.slice(0, 50),
       issues: issues.slice(0, 200),
       resolution,

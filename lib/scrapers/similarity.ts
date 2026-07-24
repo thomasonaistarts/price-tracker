@@ -27,6 +27,10 @@ export const DEFAULT_CONFIDENCE_THRESHOLDS: ConfidenceThresholds = {
   low: 0.42,
 }
 
+export function isAutomaticMatchEligible(confidence: Confidence): boolean {
+  return confidence === 'exact' || confidence === 'high' || confidence === 'medium'
+}
+
 export interface MatchResult {
   score: number                             // 0–1 genel skor
   confidence: Confidence
@@ -260,6 +264,47 @@ function bareNums(tokens: string[]): Set<string> {
   return new Set(tokens.filter(t => /^\d{2,}$/.test(t)))
 }
 
+// Ürün tipini anlatan fakat model/varyant kimliği taşımayan genel kelimeler.
+// Bunlar eşleşme skorunda kalır; yalnızca ayırt edici kimlik kontrolünden çıkar.
+const GENERIC_IDENTITY_TOKENS = new Set([
+  'adet', 'anaokul', 'beslenme', 'boy', 'boya', 'boyama',
+  'canta', 'cantasi', 'cocuk', 'defter', 'erkek', 'girl',
+  'junior', 'kalem', 'kalemi', 'kalemlik', 'kitabi', 'kitap',
+  'kids', 'kiz', 'marker', 'mini', 'okul', 'renk', 'renkli',
+  'set', 'seti', 'sirt', 'urun',
+])
+
+const PRODUCT_SUBTYPE_GROUPS = [
+  ['beslenme', 'sirt', 'kalemlik'],
+] as const
+
+function conflictingProductSubtype(queryTokens: string[], candidateTokens: string[]): string | null {
+  const querySet = new Set(queryTokens)
+  const candidateSet = new Set(candidateTokens)
+
+  for (const group of PRODUCT_SUBTYPE_GROUPS) {
+    const queryTypes = group.filter(token => querySet.has(token))
+    const candidateTypes = group.filter(token => candidateSet.has(token))
+    if (
+      queryTypes.length > 0
+      && candidateTypes.length > 0
+      && !queryTypes.some(token => candidateSet.has(token))
+    ) {
+      return `${queryTypes.join('/')} ≠ ${candidateTypes.join('/')}`
+    }
+  }
+  return null
+}
+
+function distinctiveIdentityTokens(tokens: string[]): string[] {
+  // İlk token çoğunlukla markadır ve mevcut algoritma tarafından ayrıca
+  // kontrol edilir. Burada model, seri, karakter ve varyant kelimelerini ara.
+  return tokens
+    .slice(1)
+    .filter(token => !GENERIC_IDENTITY_TOKENS.has(token))
+    .filter(token => !/^\d+$/.test(token))
+}
+
 // ── Ana eşleştirme fonksiyonu ─────────────────────────────────────────────────
 
 export function matchProduct(
@@ -280,6 +325,11 @@ export function matchProduct(
     return noMatch('Sorgu boş')
   }
 
+  const subtypeConflict = conflictingProductSubtype(qTokens, cTokens)
+  if (subtypeConflict) {
+    return noMatch(`Ürün tipi uyuşmuyor: ${subtypeConflict}`)
+  }
+
   // ── 1. Birimsiz sayı zorlaması (örn. "20 Renk" vs "10 Renk") ──────────────
   const qNums = bareNums(qTokens)
   const cNums = bareNums(cTokens)
@@ -291,14 +341,42 @@ export function matchProduct(
     }
   }
 
-  // ── 2. Anahtar kelime skoru ───────────────────────────────────────────────
+  // ── 2. Ayırt edici model/seri kimliği ─────────────────────────────────────
+  const queryIdentity = distinctiveIdentityTokens(qTokens)
+  const candidateIdentity = new Set(distinctiveIdentityTokens(cTokens))
+  const identityHits = queryIdentity.filter(token => candidateIdentity.has(token))
+
+  if (queryIdentity.length > 0 && identityHits.length === 0) {
+    const reason = `Ayırt edici kimlik uyuşmuyor: [${queryIdentity.join(', ')}]`
+    reasons.push(reason)
+    return noMatch(reason)
+  }
+  if (queryIdentity.length > 0) {
+    reasons.push(`Kimlik: ${identityHits.length}/${queryIdentity.length}`)
+  }
+
+  // ── 3. Anahtar kelime skoru ───────────────────────────────────────────────
   const hits = qTokens.filter(t => cSet.has(t)).length
   const kwScore = hits / qTokens.length
   reasons.push(`Kelime: ${hits}/${qTokens.length} (${pct(kwScore)})`)
 
-  // ── 3. Miktar karşılaştırması ─────────────────────────────────────────────
+  // ── 4. Miktar karşılaştırması ─────────────────────────────────────────────
   const qQty = primaryQty(qParsed.qtys)
   const cQty = primaryQty(cParsed.qtys)
+  const qCount = qParsed.qtys.count?.baseValue ?? null
+  const cCount = cParsed.qtys.count?.baseValue ?? null
+
+  // Bir tarafta açıkça çoklu paket/set varken diğer tarafta adet bilgisi yoksa
+  // aynı ürün kabul edilemez. Örn. tek sırt çantası ile "çanta + beslenme
+  // çantası + kalemlik 3'lü set" fiyat açısından karşılaştırılmamalıdır.
+  if (
+    (qCount !== null && qCount > 1 && cCount === null) ||
+    (cCount !== null && cCount > 1 && qCount === null)
+  ) {
+    const reason = `Çoklu paket uyumsuzluğu: ${qCount ?? 1} ≠ ${cCount ?? 1}`
+    reasons.push(reason)
+    return noMatch(reason)
+  }
 
   let qtyScore = 0.5
   let quantityRatio: number | null = null
@@ -343,10 +421,10 @@ export function matchProduct(
     reasons.push('Miktar bilgisi yok — sadece kelime benzerliği')
   }
 
-  // ── 4. Genel skor ─────────────────────────────────────────────────────────
+  // ── 5. Genel skor ─────────────────────────────────────────────────────────
   const score = Math.round((kwScore * 0.6 + qtyScore * 0.4) * 1000) / 1000
 
-  // ── 5. Güven seviyesi ─────────────────────────────────────────────────────
+  // ── 6. Güven seviyesi ─────────────────────────────────────────────────────
   // İlk token (genellikle marka adı) adayda geçmiyorsa "high" olamaz
   const firstTokenMissing = qTokens.length > 0 && !cSet.has(qTokens[0])
 

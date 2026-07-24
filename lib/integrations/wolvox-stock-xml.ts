@@ -29,6 +29,28 @@ const STAGING_RAW_FIELDS = [
   'DEGISTIRME_TARIHI',
 ] as const
 
+function normalizeIdentity(value: string | undefined) {
+  return String(value ?? '').trim().replace(/[\s-]+/g, '').toLocaleUpperCase('tr-TR')
+}
+
+function looksLikeProductIdentity(
+  value: string | undefined,
+  source: WolvoxStockSourceRow,
+): boolean {
+  const normalized = normalizeIdentity(value)
+  if (!normalized) return false
+  if (/^\d{8,14}$/.test(normalized)) return true
+  return [source.BARKODU, source.GTIN_NO, source.STOKKODU]
+    .some(identity => normalizeIdentity(identity) === normalized)
+}
+
+export function selectWolvoxCategory(source: WolvoxStockSourceRow): string {
+  return [source.GRUBU, source.ARA_GRUBU, source.ALT_GRUBU]
+    .map(value => String(value ?? '').trim())
+    .find(value => value && !looksLikeProductIdentity(value, source))
+    ?? ''
+}
+
 export function parseWolvoxStockXml(xml: string): WolvoxStockXmlResult {
   let parsed
   try {
@@ -60,7 +82,7 @@ export function mapWolvoxStockRow(source: WolvoxStockSourceRow): WolvoxCatalogIn
     barcode: source.BARKODU || source.GTIN_NO,
     product_name: source.STOK_ADI,
     brand: source.MARKASI || source.URETICI_FIRMA,
-    category: source.GRUBU,
+    category: selectWolvoxCategory(source),
     sales_price: source.KSF1,
     purchase_cost: source.KAF1,
     vat_rate: source.KDV_ORANI,

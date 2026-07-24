@@ -19,3 +19,10 @@ test('other provider failures keep a sanitized HTTP class', async () => {
 test('successful responses pass through', async () => {
   await assert.doesNotReject(assertScraperResponse(new Response('ok', { status: 200 })))
 })
+
+test('provider-side actor timeout is not reported as a generic HTTP error', async () => {
+  await assert.rejects(
+    () => assertScraperResponse(new Response('Actor run TIMED-OUT', { status: 400 })),
+    error => error?.code === 'provider_timeout',
+  )
+})

@@ -1,5 +1,6 @@
 import type { ScrapedPrice } from './types'
 import { extractTrendyolMetadata } from './metadata'
+import { assertScraperResponse } from './proxy'
 
 // Apify "Trendyol Scraper | All-In-One" — fatihtahta/trendyol-scraper
 // Actor ID: AoPP8ru9uKws5t80G
@@ -8,7 +9,7 @@ import { extractTrendyolMetadata } from './metadata'
 const ACTOR_ID = 'fatihtahta~trendyol-scraper'
 const APIFY_TIMEOUT_S = 55  // soğuk actor başlangıçlarına tolerans
 
-export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
+export async function scrapeTrendyol(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   const token = process.env.APIFY_TOKEN
   if (!token) throw new Error('APIFY_TOKEN eksik')
 
@@ -30,12 +31,10 @@ export async function scrapeTrendyol(query: string): Promise<ScrapedPrice[]> {
         getReviews: false,
         getQna: false,
       }),
+      signal,
     })
 
-    if (!res.ok) {
-      console.error('[Trendyol/Apify] HTTP', res.status)
-      throw new Error('Apify HTTP ' + res.status)
-    }
+    await assertScraperResponse(res)
 
     const items: unknown[] = await res.json()
     if (!Array.isArray(items) || items.length === 0) return []

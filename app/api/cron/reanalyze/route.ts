@@ -10,6 +10,16 @@ import {
   MARKET_TRACKING_POSTGREST_FILTER,
   MARKET_TRACKING_REFRESH_DAYS,
 } from '@/lib/market-tracking'
+import {
+  getVerifiedSourceMemory,
+  rememberProductSources,
+} from '@/lib/source-memory'
+import { withProductScrapeLease } from '@/lib/scrape-job-lease'
+import {
+  isAnalysisRetryDue,
+  type AnalysisOutcome,
+} from '@/lib/analysis-outcome'
+import { saveProductReviewCandidates } from '@/lib/review-candidates'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -33,7 +43,7 @@ export async function GET(req: NextRequest) {
   ).toISOString()
   const supabase = createAdminClient() as any
 
-  const [{ count: totalActive }, { data: products, error: productsError }] = await Promise.all([
+  const [{ count: totalActive }, { data: queuedProducts, error: productsError }] = await Promise.all([
     supabase
       .from('products')
       .select('*', { count: 'exact', head: true })
@@ -48,14 +58,21 @@ export async function GET(req: NextRequest) {
       .or(`last_attempted_at.is.null,last_attempted_at.lt.${retryCutoff}`)
       .order('last_attempted_at', { ascending: true, nullsFirst: true })
       .order('last_analyzed_at', { ascending: true, nullsFirst: true })
-      .limit(HOURLY_TARGET),
+      .limit(HOURLY_TARGET * 5),
   ])
 
   if (productsError) {
     return NextResponse.json({ error: 'Ürün kuyruğu okunamadı' }, { status: 500 })
   }
 
-  if (!products?.length) {
+  const products = (queuedProducts ?? [])
+    .filter((product: any) => isAnalysisRetryDue({
+      lastAttemptedAt: product.last_attempted_at,
+      lastOutcome: product.last_attempt_failure_reason as AnalysisOutcome | null,
+    }))
+    .slice(0, HOURLY_TARGET)
+
+  if (!products.length) {
     return NextResponse.json({
       processed: 0,
       failed: 0,
@@ -95,27 +112,42 @@ export async function GET(req: NextRequest) {
     })
   }))
 
-  const decisions = (await Promise.all(userIds.map((userId) =>
-    getSourceDecisions(
-      supabase,
-      userId,
-      products.filter((product: any) => product.user_id === userId).map((product: any) => product.id),
-    ),
-  ))).flat()
-  const decisionsByProduct = groupSourceDecisionsByProduct(decisions)
+  const [rememberedSources, decisions] = await Promise.all([
+    Promise.all(userIds.map((userId) =>
+      getVerifiedSourceMemory(
+        supabase,
+        userId,
+        products.filter((product: any) => product.user_id === userId).map((product: any) => product.id),
+      ),
+    )).then(groups => groups.flat()),
+    Promise.all(userIds.map((userId) =>
+      getSourceDecisions(
+        supabase,
+        userId,
+        products.filter((product: any) => product.user_id === userId).map((product: any) => product.id),
+      ),
+    )).then(groups => groups.flat()),
+  ])
+  const decisionsByProduct = groupSourceDecisionsByProduct([
+    ...rememberedSources,
+    ...decisions,
+  ])
 
   let processed = 0
   let failed = 0
+  let skippedLocked = 0
 
   for (let index = 0; index < products.length; index += CONCURRENT) {
     const batch = products.slice(index, index + CONCURRENT)
     const results = await Promise.allSettled(batch.map((product: any) => {
       const options = optionsByUser.get(product.user_id)
       if (!options) throw new Error('Kullanıcı ayarları yüklenemedi')
-      return analyzeProduct(product, {
-        ...options,
-        sourceDecisions: decisionsByProduct.get(product.id) ?? [],
-      })
+      return withProductScrapeLease(supabase, product.id, () =>
+        analyzeProduct(product, {
+          ...options,
+          sourceDecisions: decisionsByProduct.get(product.id) ?? [],
+        })
+      )
     }))
 
     await Promise.all(results.map(async (settled, resultIndex) => {
@@ -133,14 +165,23 @@ export async function GET(req: NextRequest) {
       }
 
       const product = batch[resultIndex]
-      const result = settled.value
+      if (!settled.value.acquired) {
+        skippedLocked += 1
+        return
+      }
+      const result = settled.value.value
+      await saveProductReviewCandidates(supabase, {
+        productId: product.id,
+        userId: product.user_id,
+        candidates: result.review_candidates,
+      }).catch(() => undefined)
       if (result.technical_failure) {
         await recordAnalysisAttempt(supabase, {
           productId: product.id,
           userId: product.user_id,
           status: 'failed',
-          failureReason: 'no_sources',
-          errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+          failureReason: result.outcome,
+          errorMessage: `Analiz tamamlanamadı: ${result.outcome}`,
           scraperHealth: result.scraper_health,
         }).catch(() => undefined)
         failed += 1
@@ -190,7 +231,13 @@ export async function GET(req: NextRequest) {
         userId: product.user_id,
         status: 'success',
         attemptedAt: analyzedAt,
+        failureReason: result.outcome === 'insufficient_sources' ? result.outcome : null,
         scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
+      await rememberProductSources(supabase, {
+        productId: product.id,
+        userId: product.user_id,
+        sources: result.sources,
       }).catch(() => undefined)
 
       processed += 1
@@ -207,6 +254,7 @@ export async function GET(req: NextRequest) {
     refresh_window_capacity: HOURLY_TARGET * 24 * REFRESH_DAYS,
     refresh_days: REFRESH_DAYS,
     retry_cooldown_hours: RETRY_COOLDOWN_HOURS,
+    skipped_locked: skippedLocked,
     elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
     next_run_in: '1 saat',
   })

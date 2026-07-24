@@ -6,6 +6,11 @@ import { analyzeProduct } from '@/lib/analyzer'
 import { getUserSettings } from '@/lib/user-settings'
 import { recordAnalysisAttempt } from '@/lib/analysis-attempts'
 import { getSourceDecisions, groupSourceDecisionsByProduct } from '@/lib/source-decisions'
+import {
+  getVerifiedSourceMemory,
+  rememberProductSources,
+} from '@/lib/source-memory'
+import { saveProductReviewCandidates } from '@/lib/review-candidates'
 
 // Vercel Pro: 300s max — ScraperAPI premium+render ~30s/ürün
 export const maxDuration = 300
@@ -81,8 +86,14 @@ export async function POST(req: NextRequest) {
     existingProducts.push(...(data ?? []))
   }
   const existingBySku = new Map(existingProducts.map((product) => [product.sku, product.id]))
-  const sourceDecisions = await getSourceDecisions(supabase, userId, existingProducts.map((product) => product.id))
-  const decisionsByProduct = groupSourceDecisionsByProduct(sourceDecisions)
+  const [rememberedSources, sourceDecisions] = await Promise.all([
+    getVerifiedSourceMemory(supabase, userId, existingProducts.map((product) => product.id)),
+    getSourceDecisions(supabase, userId, existingProducts.map((product) => product.id)),
+  ])
+  const decisionsByProduct = groupSourceDecisionsByProduct([
+    ...rememberedSources,
+    ...sourceDecisions,
+  ])
 
   const startedAt = Date.now()
   const BATCH = 5
@@ -132,30 +143,45 @@ export async function POST(req: NextRequest) {
         userId,
         status: 'failed',
         attemptedAt: now,
-        failureReason: 'no_sources',
-        errorMessage: 'Pazar yerlerinden fiyat kaynağı alınamadı',
+        failureReason: result.outcome,
+        errorMessage: `Analiz tamamlanamadı: ${result.outcome}`,
         scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
+      await saveProductReviewCandidates(supabase, {
+        productId: existingProduct.id,
+        userId,
+        candidates: result.review_candidates,
+        observedAt: now,
       }).catch(() => undefined)
     }
   }
 
   for (const result of completedResults) {
+    const productUpsert: Record<string, unknown> = {
+      user_id: userId,
+      sku: result.sku,
+      product_name: result.product_name,
+      brand: result.brand || null,
+      category: result.category || null,
+      our_price: result.our_price,
+      currency: 'TRY',
+      last_analyzed_at: now,
+    }
+    if (result.barcode) productUpsert.barcode = result.barcode
+
     const { data: product, error: productError } = await supabase
       .from('products')
-      .upsert({
-        user_id: userId,
-        sku: result.sku,
-        product_name: result.product_name,
-        brand: result.brand || null,
-        category: result.category || null,
-        our_price: result.our_price,
-        currency: 'TRY',
-        last_analyzed_at: now,
-      }, { onConflict: 'user_id,sku', ignoreDuplicates: false })
+      .upsert(productUpsert, { onConflict: 'user_id,sku', ignoreDuplicates: false })
       .select('id')
       .single()
 
     if (productError || !product) continue
+    await saveProductReviewCandidates(supabase, {
+      productId: product.id,
+      userId,
+      candidates: result.review_candidates,
+      observedAt: now,
+    }).catch(() => undefined)
 
     const { error: analysisError } = await supabase.from('price_analyses').insert({
       product_id: product.id,
@@ -185,7 +211,13 @@ export async function POST(req: NextRequest) {
         userId,
         status: 'success',
         attemptedAt: now,
+        failureReason: result.outcome === 'insufficient_sources' ? result.outcome : null,
         scraperHealth: result.scraper_health,
+      }).catch(() => undefined)
+      await rememberProductSources(supabase, {
+        productId: product.id,
+        userId,
+        sources: result.sources,
       }).catch(() => undefined)
     }
   }

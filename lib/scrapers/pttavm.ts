@@ -1,6 +1,7 @@
 import type { ScrapedPrice } from './types'
 import { assertScraperResponse, proxiedUrl } from './proxy'
 import { extractSchemaOfferMetadata } from './metadata'
+import { parseMarketplacePrice } from './price'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -8,10 +9,10 @@ const HEADERS = {
   'Accept-Language': 'tr-TR,tr;q=0.9',
 }
 
-export async function scrapePttavm(query: string): Promise<ScrapedPrice[]> {
+export async function scrapePttavm(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   try {
     const url = `https://www.pttavm.com/arama?q=${encodeURIComponent(query)}`
-    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store' })
+    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store', signal })
     await assertScraperResponse(res)
 
     const html = await res.text()
@@ -30,7 +31,7 @@ export async function scrapePttavm(query: string): Promise<ScrapedPrice[]> {
           if (!product) continue
 
           const rawPrice = product?.offers?.price ?? 0
-          const price = Math.round(parseFloat(String(rawPrice)))
+          const price = parseMarketplacePrice(rawPrice)
           if (!price || price <= 0 || price > 10_000_000) continue
 
           const name: string = product?.name ?? ''

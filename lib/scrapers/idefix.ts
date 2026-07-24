@@ -1,6 +1,7 @@
 import type { ScrapedPrice } from './types'
 import { assertScraperResponse, proxiedUrl } from './proxy'
 import { extractGenericCommerceMetadata, mergeCommerceMetadata } from './metadata'
+import { parseMarketplacePrice } from './price'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -8,10 +9,10 @@ const HEADERS = {
   'Accept-Language': 'tr-TR,tr;q=0.9',
 }
 
-export async function scrapeIdefix(query: string): Promise<ScrapedPrice[]> {
+export async function scrapeIdefix(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   try {
     const url = `https://www.idefix.com/arama?q=${encodeURIComponent(query)}`
-    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store' })
+    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store', signal })
     await assertScraperResponse(res)
 
     const html = await res.text()
@@ -29,33 +30,33 @@ export async function scrapeIdefix(query: string): Promise<ScrapedPrice[]> {
       const variants: any[] = item?.variants ?? []
       if (variants.length === 0) continue
 
-      // Tüm varyantlar arasında en düşük fiyatlı olanı al
-      let bestVariant: any = null
-      let bestPrice = Infinity
-      for (const v of variants) {
-        const p = v?.discountedSalesPrice ?? v?.price ?? 0
-        if (p > 0 && p < bestPrice) { bestPrice = p; bestVariant = v }
+      // Varyantları merkezi ürün eşleştiriciye ayrı adaylar olarak gönder.
+      // En ucuz fakat yanlış varyantın doğru ürünü gölgelemesini engeller.
+      for (const variant of variants) {
+        const price = parseMarketplacePrice(
+          variant?.discountedSalesPrice ?? variant?.price ?? 0
+        )
+        const name: string = variant?.name ?? variant?.originalName ?? ''
+        const handleUrl: string = variant?.handleUrl ?? ''
+
+        if (!price || price <= 0 || price > 10_000_000) continue
+        if (name.length < 10) continue
+
+        results.push({
+          site: 'İdefix',
+          product_name: name,
+          price,
+          url: `https://www.idefix.com${handleUrl}`,
+          currency: 'TRY',
+          ...mergeCommerceMetadata(
+            extractGenericCommerceMetadata(variant, price),
+            extractGenericCommerceMetadata(item, price),
+          ),
+        })
+
+        if (results.length >= 12) break
       }
-      if (!bestVariant) continue
-
-      const price = Math.round(bestPrice)
-      const name: string = bestVariant?.name ?? bestVariant?.originalName ?? ''
-      const handleUrl: string = bestVariant?.handleUrl ?? ''
-
-      if (price <= 0 || price > 10_000_000) continue
-      if (name.length < 10) continue
-
-      results.push({
-        site: 'İdefix',
-        product_name: name,
-        price,
-        url: `https://www.idefix.com${handleUrl}`,
-        currency: 'TRY',
-        ...mergeCommerceMetadata(
-          extractGenericCommerceMetadata(bestVariant, price),
-          extractGenericCommerceMetadata(item, price),
-        ),
-      })
+      if (results.length >= 12) break
     }
 
     return results

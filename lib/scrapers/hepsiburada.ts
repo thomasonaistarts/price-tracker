@@ -16,7 +16,7 @@ const HEADERS_JSON = {
 }
 
 // Hepsiburada'nın iç API'si — React uygulaması bu endpoint'i çağırıyor
-async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
+async function tryInternalApi(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   const candidates = [
     `https://www.hepsiburada.com/search/api/product-listing/search?q=${encodeURIComponent(query)}&offset=0&limit=20&platform=hepsiburada`,
   ]
@@ -26,7 +26,9 @@ async function tryInternalApi(query: string): Promise<ScrapedPrice[]> {
       const res = await fetch(proxiedUrl(url), {
         headers: HEADERS_JSON,
         cache: 'no-store',
-        signal: AbortSignal.timeout(7_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(7_000)])
+          : AbortSignal.timeout(7_000),
       })
       if (!res.ok) {
         try {
@@ -140,15 +142,19 @@ function extractFromRenderedHtml(html: string, query: string): ScrapedPrice[] {
   return results
 }
 
-export async function scrapeHepsiburada(query: string): Promise<ScrapedPrice[]> {
+export async function scrapeHepsiburada(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   // Önce daha ucuz iç API isteğini dene; sonuç yoksa render edilmiş sayfaya düş.
-  const apiResults = dedup(await tryInternalApi(query))
+  const apiResults = dedup(await tryInternalApi(query, signal))
   if (apiResults.length > 0) return apiResults
 
   // render=true ile tam sayfa render (JavaScript çalıştırır — 10 kredi)
   try {
     const url = `https://www.hepsiburada.com/ara?q=${encodeURIComponent(query)}`
-    const res = await fetch(proxiedUrl(url, true, false), { headers: HEADERS_HTML, cache: 'no-store' })
+    const res = await fetch(proxiedUrl(url, true, false), {
+      headers: HEADERS_HTML,
+      cache: 'no-store',
+      signal,
+    })
     await assertScraperResponse(res)
 
     const html = await res.text()

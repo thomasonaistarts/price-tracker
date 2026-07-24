@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { recommendPrice } from '@/lib/price-recommendation'
 import { createClient } from '@/lib/supabase/server'
+import {
+  priceChangePercent,
+  requiresLargePriceChangeConfirmation,
+} from '@/lib/price-change-safety'
 
 export async function POST(
   req: NextRequest,
@@ -66,6 +70,19 @@ export async function POST(
     return NextResponse.json({ error: 'Ürün fiyatı zaten önerilen seviyede.' }, { status: 409 })
   }
 
+  const changePercent = priceChangePercent(Number(product.our_price), recommendation.recommendedPrice)
+  if (
+    requiresLargePriceChangeConfirmation(Number(product.our_price), recommendation.recommendedPrice)
+    && body.confirm_large_change !== true
+  ) {
+    return NextResponse.json({
+      error: `Öneri mevcut fiyattan %${changePercent.toFixed(2)} farklı. %10 üzerindeki değişiklikler ek onay gerektirir.`,
+      requires_large_change_confirmation: true,
+      change_percent: changePercent,
+      recommendation,
+    }, { status: 409 })
+  }
+
   const snapshot = {
     calculated_at: new Date().toISOString(),
     minimum_safe_price: recommendation.minimumSafePrice,
@@ -107,5 +124,6 @@ export async function POST(
     recommendation,
     change,
     external_sync: false,
+    change_percent: changePercent,
   })
 }

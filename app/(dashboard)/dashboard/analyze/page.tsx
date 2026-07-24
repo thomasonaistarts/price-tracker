@@ -13,7 +13,7 @@ interface AnalysisResult {
   market_mean: number | null; market_median: number | null
   min_price: number | null; max_price: number | null
   price_diff_percent: number | null; alert: string; alert_reason: string
-  sources_count: number; sources: Source[]; confidence: number; notes: string[]
+  sources_count: number; sources: Source[]; review_candidates: Source[]; confidence: number; notes: string[]
 }
 interface DupInfo { existing: string[]; new_skus: string[] }
 interface RawProduct {
@@ -760,10 +760,15 @@ export default function AnalyzePage() {
                           {r.sources_count > 0 ? <ConfidenceDots sources={r.sources} /> : '—'}
                         </td>
                       </tr>
-                      {expandedRow === r.sku && r.sources.length > 0 && (
+                      {expandedRow === r.sku && (r.sources.length > 0 || r.review_candidates.length > 0) && (
                         <tr key={`${r.sku}-detail`} className="bg-blue-50 dark:bg-blue-900/20">
                           <td colSpan={8} className="px-6 py-4">
-                            <SourceGroups sources={r.sources} fmt={fmt} />
+                            {r.review_candidates.length > 0 && (
+                              <p className="mb-2 text-xs font-medium text-orange-600 dark:text-orange-300">
+                                {r.review_candidates.length} düşük güvenli aday fiyat hesabına dahil edilmedi.
+                              </p>
+                            )}
+                            <SourceGroups sources={[...r.sources, ...r.review_candidates]} fmt={fmt} />
                             {r.alert_reason && <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">{r.alert_reason}</p>}
                           </td>
                         </tr>

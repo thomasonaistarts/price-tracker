@@ -82,10 +82,10 @@ function parseN11Html(html: string, query: string): ScrapedPrice[] {
   return results
 }
 
-export async function scrapeN11(query: string): Promise<ScrapedPrice[]> {
+export async function scrapeN11(query: string, signal?: AbortSignal): Promise<ScrapedPrice[]> {
   try {
     const url = `https://www.n11.com/arama?q=${encodeURIComponent(query)}`
-    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store' })
+    const res = await fetch(proxiedUrl(url), { headers: HEADERS, cache: 'no-store', signal })
     await assertScraperResponse(res)
     const html = await res.text()
     return parseN11Html(html, query)

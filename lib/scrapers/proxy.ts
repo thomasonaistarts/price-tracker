@@ -1,4 +1,8 @@
-export type ScraperProxyErrorCode = 'quota_exhausted' | 'http_4xx' | 'http_5xx'
+export type ScraperProxyErrorCode =
+  | 'quota_exhausted'
+  | 'provider_timeout'
+  | 'http_4xx'
+  | 'http_5xx'
 
 export class ScraperProxyError extends Error {
   readonly code: ScraperProxyErrorCode
@@ -16,6 +20,9 @@ export async function assertScraperResponse(response: Response) {
   const body = await response.text().catch(() => '')
   if (body.toLowerCase().includes('exhausted the api credits')) {
     throw new ScraperProxyError('quota_exhausted')
+  }
+  if (body.toLowerCase().includes('timed-out') || body.toLowerCase().includes('timed out')) {
+    throw new ScraperProxyError('provider_timeout')
   }
 
   throw new ScraperProxyError(response.status >= 500 ? 'http_5xx' : 'http_4xx')

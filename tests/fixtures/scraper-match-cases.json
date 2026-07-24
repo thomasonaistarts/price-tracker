@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Corgi doğru model",
+    "query": "Adel Junior Love Corgi Sırt Çantası",
+    "candidate": "Adel Sırt Çantası Junior Corgi 2177000123000",
+    "accepted": true
+  },
+  {
+    "name": "Corgi yerine Happy Girl",
+    "query": "Adel Junior Love Corgi Sırt Çantası",
+    "candidate": "Adel Mini Anaokul Sırt Çantası Junior Happy Girl 2177 000182",
+    "accepted": false
+  },
+  {
+    "name": "tek çanta yerine üçlü set",
+    "query": "Adel Junior Love Corgi Sırt Çantası",
+    "candidate": "Junior Backpack I Love Corgi Okul Çantası Beslenme Çantası ve Kalemlik 3'lü Set",
+    "accepted": false
+  },
+  {
+    "name": "Kuromi doğru yayınevi",
+    "query": "Kuromi Boyama Kitabı The Çocuk",
+    "candidate": "Kuromi Boyama Kitabı The Çocuk",
+    "accepted": true
+  },
+  {
+    "name": "Kuromi farklı seri ve yayınevi",
+    "query": "Kuromi Boyama Kitabı The Çocuk",
+    "candidate": "Kuromi Star Simli Çıkartmalı Boyama Kitabı Doğan Çocuk",
+    "accepted": false
+  },
+  {
+    "name": "Kuromi yerine başka kitap paketi",
+    "query": "Kuromi Boyama Kitabı The Çocuk",
+    "candidate": "Nesil Çocuk Yayınları Patates Spor 5 Kitap + The Amazing World of Gumball Boyama Kit",
+    "accepted": false
+  },
+  {
+    "name": "beslenme çantası yerine sırt çantası",
+    "query": "Adel Beslenme Çantası Slam Dunk",
+    "candidate": "Küçük Çocuk Sırt Çantası, Slam Dunk",
+    "accepted": false
+  }
+]
